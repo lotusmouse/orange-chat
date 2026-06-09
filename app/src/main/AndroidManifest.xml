@@ -237,6 +237,14 @@
         android:name="android.support.FILE_PROVIDER_PATHS"
         android:resource="@xml/file_paths" />
     </provider>
+    <!-- Runtime Init Provider - extracts Python/Node.js on first launch -->
+    <provider
+      android:name=".utils.RuntimeInitProvider"
+      android:authorities="${applicationId}.runtime-init"
+      android:enabled="true"
+      android:exported="false"
+      android:initOrder="100" />
+
     <provider
       android:name="androidx.startup.InitializationProvider"
       android:authorities="${applicationId}.androidx-startup"

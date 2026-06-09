@@ -69,5 +69,5 @@
       ]
     }
   ],
-  "promptTemplate": "你拥有代码执行能力：\n1. run_python(script, install_deps) - 运行Python代码\n2. run_node(script, install_deps) - 运行Node.js代码\n3. install_python_packages(packages) - 安装Python包\n4. install_node_packages(packages) - 安装npm包\n\n注意：\n- 如果需要生成Excel，先install_python_packages安装openpyxl，再用run_python执行\n- Python虚拟环境在 ~/.code_runner/py\n- Node工作目录在 ~/.code_runner/node\n- 生成的文件保存到 /sdcard/Download/"
+  "promptTemplate": "你拥有代码执行能力：\n1. run_python(script, install_deps) - 运行Python代码\n2. run_node(script, install_deps) - 运行Node.js代码\n3. install_python_packages(packages) - 安装Python包\n4. install_node_packages(packages) - 安装npm包\n\n注意：\n- 如果需要生成Excel，先install_python_packages安装openpyxl，再用run_python执行\n- Python和Node.js运行时由橘瓣内置，无需配置环境\n- 生成的文件保存到 /sdcard/Download/"
 }

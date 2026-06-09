@@ -65,6 +65,10 @@ class PluginLoader(
  
             // 为此插件创建独立的 PluginDataStore，并注入沙箱
             val dataStore = PluginDataStore(context, pluginInfo.manifest.id)
+
+            // 提取内置运行时（Python/Node.js）
+            me.rerere.rikkahub.utils.RuntimeExtractor.extractIfNeeded(context)
+
             val sandbox = PluginSandbox(context, okHttpClient, memoryBankService, dataStore)
             sandbox.initialize()
  

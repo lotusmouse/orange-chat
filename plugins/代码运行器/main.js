@@ -1,7 +1,9 @@
 // ===== 代码运行器插件 =====
 // 橘瓣 QuickJS 沙箱 - 同步风格，无 async/await
-// 使用 Bridge.executeCommand() 执行终端命令
-// 运行时环境由橘瓣自动注入（PATH, LD_LIBRARY_PATH, HOME）
+// 使用 exec() 执行终端命令（自动注入运行时环境变量）
+
+// 运行时目录
+var RUNTIME = '/data/data/com.orangechat/files/runtime';
 
 // Node工作目录
 var NODE_DIR = '/data/data/com.orangechat/files/.code_runner/node';
@@ -9,10 +11,36 @@ var NODE_DIR = '/data/data/com.orangechat/files/.code_runner/node';
 // 临时文件目录
 var TEMP_DIR = '/data/data/com.orangechat/files/.code_runner/temp';
 
+// 运行时环境前缀（自动检测运行时是否可用）
+var __envPrefix = '';
+
+// 初始化运行时环境
+function initRuntime() {
+  try {
+    var check = Bridge.executeCommand('[ -d ' + RUNTIME + '/bin ] && echo YES || echo NO');
+    if (check.output && check.output.indexOf('YES') !== -1) {
+      __envPrefix = 'export PATH=' + RUNTIME + '/bin:$PATH LD_LIBRARY_PATH=' + RUNTIME + '/lib HOME=' + RUNTIME + ' && ';
+    }
+  } catch (e) {
+    // 运行时不可用，继续无前缀执行
+  }
+}
+
+// 初始化（首次加载时检测）
+initRuntime();
+
+// 带环境变量注入的命令执行
+function exec(command) {
+  if (__envPrefix) {
+    return Bridge.executeCommand(__envPrefix + command);
+  }
+  return Bridge.executeCommand(command);
+}
+
 // ===== 辅助函数 =====
 
 function ensureDir(path) {
-  Bridge.executeCommand('mkdir -p ' + path);
+  exec('mkdir -p ' + path);
 }
 
 function randomMarker() {
@@ -21,9 +49,9 @@ function randomMarker() {
 
 function ensureNodeDir() {
   ensureDir(NODE_DIR);
-  var check = Bridge.executeCommand('[ -f ' + NODE_DIR + '/package.json ] && echo OK || echo NO');
+  var check = exec('[ -f ' + NODE_DIR + '/package.json ] && echo OK || echo NO');
   if (check.output.indexOf('OK') === -1) {
-    Bridge.executeCommand('cd ' + NODE_DIR + ' && npm init -y');
+    exec('cd ' + NODE_DIR + ' && npm init -y');
   }
   return null;
 }
@@ -37,7 +65,7 @@ function run_python(params) {
   }
 
   if (params.install_deps && params.install_deps.trim() !== '') {
-    var installResult = Bridge.executeCommand('pip install ' + params.install_deps);
+    var installResult = exec('pip install ' + params.install_deps);
     if (installResult.exitCode !== 0) {
       return { success: false, error: '安装依赖失败: ' + installResult.output };
     }
@@ -47,11 +75,11 @@ function run_python(params) {
   var marker = randomMarker();
   var tempFile = TEMP_DIR + '/temp_script_' + Math.floor(Math.random() * 999999) + '.py';
   var sq = String.fromCharCode(39);
-  Bridge.executeCommand('cat > ' + tempFile + ' << ' + sq + marker + sq + '\n' + script + '\n' + marker);
+  exec('cat > ' + tempFile + ' << ' + sq + marker + sq + '\n' + script + '\n' + marker);
 
-  var result = Bridge.executeCommand('python3 ' + tempFile);
+  var result = exec('python3 ' + tempFile);
 
-  Bridge.executeCommand('rm -f ' + tempFile);
+  exec('rm -f ' + tempFile);
 
   if (result.exitCode === 0) {
     return { success: true, output: result.output.trim() };
@@ -70,7 +98,7 @@ function run_node(params) {
   if (nodeError) return { success: false, error: nodeError };
 
   if (params.install_deps && params.install_deps.trim() !== '') {
-    var installResult = Bridge.executeCommand('cd ' + NODE_DIR + ' && npm install ' + params.install_deps);
+    var installResult = exec('cd ' + NODE_DIR + ' && npm install ' + params.install_deps);
     if (installResult.exitCode !== 0) {
       return { success: false, error: '安装npm依赖失败: ' + installResult.output };
     }
@@ -80,11 +108,11 @@ function run_node(params) {
   var marker = randomMarker();
   var tempFile = TEMP_DIR + '/temp_script_' + Math.floor(Math.random() * 999999) + '.js';
   var sq = String.fromCharCode(39);
-  Bridge.executeCommand('cat > ' + tempFile + ' << ' + sq + marker + sq + '\n' + script + '\n' + marker);
+  exec('cat > ' + tempFile + ' << ' + sq + marker + sq + '\n' + script + '\n' + marker);
 
-  var result = Bridge.executeCommand('cd ' + NODE_DIR + ' && NODE_PATH=' + NODE_DIR + '/node_modules node ' + tempFile);
+  var result = exec('cd ' + NODE_DIR + ' && NODE_PATH=' + NODE_DIR + '/node_modules node ' + tempFile);
 
-  Bridge.executeCommand('rm -f ' + tempFile);
+  exec('rm -f ' + tempFile);
 
   if (result.exitCode === 0) {
     return { success: true, output: result.output.trim() };
@@ -98,7 +126,7 @@ function install_python_packages(params) {
   if (!packages || packages.trim() === '') {
     return { success: false, error: '请提供包名' };
   }
-  var result = Bridge.executeCommand('pip install ' + packages);
+  var result = exec('pip install ' + packages);
   if (result.exitCode === 0) {
     return { success: true, output: result.output.trim() };
   } else {
@@ -113,7 +141,7 @@ function install_node_packages(params) {
   }
   var nodeError = ensureNodeDir();
   if (nodeError) return { success: false, error: nodeError };
-  var result = Bridge.executeCommand('cd ' + NODE_DIR + ' && npm install ' + packages);
+  var result = exec('cd ' + NODE_DIR + ' && npm install ' + packages);
   if (result.exitCode === 0) {
     return { success: true, output: result.output.trim() };
   } else {

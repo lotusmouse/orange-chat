@@ -730,7 +730,9 @@ function fetch(url, options) {
             return """{"success":false,"error":"command is empty","exitCode":-1}"""
         }
         return try {
-            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", command))
+            val envPrefix = RuntimeExtractor.getEnvPrefixIfAvailable(context)
+            val finalCommand = if (envPrefix != null) "$envPrefix$command" else command
+            val process = Runtime.getRuntime().exec(arrayOf("sh", "-c", finalCommand))
 
             val output = StringBuilder()
             val error = StringBuilder()
