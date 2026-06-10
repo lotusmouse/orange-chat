@@ -1,4 +1,6 @@
 import { useReveal } from './useReveal'
+import { useState, useEffect } from 'react'
+import { fetchLatestRelease, formatFileSize, formatDate, type Release } from './github-api'
 
 /* ─── Navbar ─── */
 function Navbar() {
@@ -9,9 +11,9 @@ function Navbar() {
           <img src="/icon.png" alt="" className="w-7 h-7 rounded" />
           <span className="heading-serif text-lg text-warm-900">橘瓣</span>
         </div>
-        <a href="https://github.com/sue1231513/orangechat/releases" target="_blank" rel="noopener noreferrer"
+        <a href="https://github.com/tdevid523-bot/orangechat/releases" target="_blank" rel="noopener noreferrer"
           className="text-xs tracking-[0.15em] uppercase text-warm-900 border border-warm-900 px-5 py-2 hover:bg-warm-900 hover:text-cream-100 transition-colors duration-300">
-          Download
+          下载
         </a>
       </div>
     </nav>
@@ -31,11 +33,11 @@ function Hero() {
           更是<em className="text-accent-500 not-italic">生活在一起</em>的 AI 伴侣
         </p>
         <div className="flex gap-4 justify-center animate-fade-up" style={{ animationDelay: '0.15s' }}>
-          <a href="https://github.com/sue1231513/orangechat/releases" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/tdevid523-bot/orangechat/releases" target="_blank" rel="noopener noreferrer"
             className="text-sm tracking-[0.1em] uppercase bg-warm-900 text-cream-100 px-8 py-3 hover:bg-warm-700 transition-colors duration-300">
             下载
           </a>
-          <a href="https://github.com/sue1231513/orangechat" target="_blank" rel="noopener noreferrer"
+          <a href="https://github.com/tdevid523-bot/orangechat" target="_blank" rel="noopener noreferrer"
             className="text-sm tracking-[0.1em] uppercase border border-warm-300 text-warm-600 px-8 py-3 hover:border-warm-900 hover:text-warm-900 transition-colors duration-300">
             GitHub
           </a>
@@ -176,17 +178,88 @@ function Screenshots() {
 /* ─── Download ─── */
 function Download() {
   const ref = useReveal()
+  const [release, setRelease] = useState<Release | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchLatestRelease().then((r) => {
+      setRelease(r)
+      setLoading(false)
+    })
+  }, [])
+
+  const apkAssets = release?.assets.filter((a) =>
+    a.name.endsWith('.apk')
+  ) ?? []
+
   return (
     <section ref={ref} className="min-h-screen flex items-center justify-center bg-warm-900 text-cream-200">
       <div className="max-w-2xl mx-auto px-6 md:px-12 text-center reveal">
         <img src="/icon.png" alt="" className="w-16 h-16 rounded mx-auto mb-12" />
         <h2 className="heading-serif text-5xl md:text-7xl mb-4">开始使用<span className="text-accent-400">橘瓣</span></h2>
-        <p className="text-warm-400 mb-12">让 AI 不止活在对话框里</p>
-        <a href="https://github.com/sue1231513/orangechat/releases" target="_blank" rel="noopener noreferrer"
-          className="inline-block text-sm tracking-[0.15em] uppercase bg-accent-500 text-white px-10 py-4 hover:bg-accent-600 transition-colors duration-300">
-          下载橘瓣
+        <p className="text-warm-400 mb-8">让 AI 不止活在对话框里</p>
+
+        {loading ? (
+          <div className="mb-8">
+            <div className="inline-block w-5 h-5 border-2 border-warm-500 border-t-accent-500 rounded-full animate-spin"></div>
+          </div>
+        ) : release ? (
+          <div className="mb-8">
+            <p className="text-warm-500 text-xs mb-6">
+              最新版本 {release.tag_name} · {formatDate(release.published_at)}
+            </p>
+            {apkAssets.length > 0 ? (
+              <div className="flex flex-col gap-3 max-w-md mx-auto">
+                {apkAssets.map((asset) => (
+                  <a
+                    key={asset.name}
+                    href={asset.browser_download_url}
+                    className="flex items-center justify-between bg-warm-800 hover:bg-warm-700 border border-warm-700 px-5 py-3 transition-colors duration-300 group"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <svg className="w-4 h-4 text-accent-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+                      </svg>
+                      <span className="text-sm text-cream-200 truncate">{asset.name}</span>
+                    </div>
+                    <span className="text-xs text-warm-500 shrink-0 ml-3">{formatFileSize(asset.size)}</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <a
+                href={release.html_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-block text-sm tracking-[0.15em] uppercase bg-accent-500 text-white px-10 py-4 hover:bg-accent-600 transition-colors duration-300"
+              >
+                前往下载
+              </a>
+            )}
+          </div>
+        ) : (
+          <div className="mb-8">
+            <a
+              href="https://github.com/tdevid523-bot/orangechat/releases"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-block text-sm tracking-[0.15em] uppercase bg-accent-500 text-white px-10 py-4 hover:bg-accent-600 transition-colors duration-300"
+            >
+              下载橘瓣
+            </a>
+          </div>
+        )}
+
+        <a
+          href="https://github.com/tdevid523-bot/orangechat/releases"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-block text-xs text-warm-500 hover:text-accent-400 transition-colors mb-8"
+        >
+          查看所有版本 →
         </a>
-        <div className="mt-8 flex items-center justify-center gap-8 text-xs text-warm-500">
+
+        <div className="flex items-center justify-center gap-8 text-xs text-warm-500">
           <span>Android 8.0+</span>
           <span>·</span>
           <span>开源免费</span>
@@ -205,8 +278,8 @@ function Footer() {
       <div className="max-w-screen-xl mx-auto px-6 md:px-12 flex flex-col md:flex-row items-center justify-between gap-4">
         <span className="text-xs">橘瓣 OrangeChat · Apache License 2.0 · 致谢 RikkaHub</span>
         <div className="flex gap-6 text-xs">
-          <a href="https://github.com/sue1231513/orangechat" target="_blank" rel="noopener noreferrer" className="hover:text-cream-200 transition-colors">GitHub</a>
-          <a href="https://github.com/sue1231513/orangechat/releases" target="_blank" rel="noopener noreferrer" className="hover:text-cream-200 transition-colors">下载</a>
+          <a href="https://github.com/tdevid523-bot/orangechat" target="_blank" rel="noopener noreferrer" className="hover:text-cream-200 transition-colors">GitHub</a>
+          <a href="https://github.com/tdevid523-bot/orangechat/releases" target="_blank" rel="noopener noreferrer" className="hover:text-cream-200 transition-colors">下载</a>
           <a href="https://github.com/rikkahub/rikkahub" target="_blank" rel="noopener noreferrer" className="hover:text-cream-200 transition-colors">RikkaHub</a>
         </div>
       </div>
