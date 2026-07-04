@@ -15,6 +15,7 @@ import me.rerere.rikkahub.ui.pages.history.HistoryVM
 import me.rerere.rikkahub.ui.pages.stats.StatsVM
 import me.rerere.rikkahub.ui.pages.imggen.ImgGenVM
 import me.rerere.rikkahub.ui.pages.extensions.PromptVM
+import me.rerere.rikkahub.ui.pages.extensions.ExternalMemoriesVM
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillDetailVM
 import me.rerere.rikkahub.ui.pages.extensions.SkillsVM
@@ -68,6 +69,7 @@ val viewModelModule = module {
     viewModelOf(::DeveloperVM)
     viewModelOf(::PromptVM)
     viewModelOf(::QuickMessagesVM)
+    viewModelOf(::ExternalMemoriesVM)
     viewModelOf(::SkillsVM)
     viewModelOf(::SkillDetailVM)
     viewModelOf(::WorkspaceVM)

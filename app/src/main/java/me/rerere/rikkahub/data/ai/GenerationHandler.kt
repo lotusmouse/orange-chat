@@ -21,6 +21,7 @@ import me.rerere.ai.core.merge
 import me.rerere.ai.provider.CustomBody
 import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.Provider
+import me.rerere.ai.provider.EmbeddingGenerationParams
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.ProviderSetting
 import me.rerere.ai.provider.TextGenerationParams
@@ -39,6 +40,7 @@ import me.rerere.rikkahub.data.ai.transformers.visualTransforms
 import me.rerere.rikkahub.data.ai.tools.buildMemoryTools
 import me.rerere.rikkahub.data.ai.tools.buildWriteFilesTool
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.rikkahub.data.datastore.findModelById
 import me.rerere.rikkahub.data.datastore.findProvider
 import me.rerere.rikkahub.data.model.Assistant
@@ -65,6 +67,7 @@ class GenerationHandler(
     private val memoryRepo: MemoryRepository,
     private val conversationRepo: ConversationRepository,
     private val aiLoggingManager: AILoggingManager,
+    private val memoryBankService: MemoryBankService,
 ) {
     fun generateText(
         settings: Settings,
@@ -369,6 +372,87 @@ class GenerationHandler(
                     appendLine()
                     append(buildMemoryPrompt(memories = memories))
                 }
+
+                // 外置记忆库召回
+                try {
+                    val externalMemoryConfigs = settings.externalMemories.filter {
+                        it.enabled && it.id in assistant.externalMemoryIds
+                    }
+                    if (externalMemoryConfigs.isNotEmpty()) {
+                        val lastUserMessage = messages.lastOrNull { it.role == MessageRole.USER }
+                        val queryText = lastUserMessage?.toText()?.take(200)?.trim() ?: ""
+                        val allRecalled = mutableListOf<String>()
+                        externalMemoryConfigs.forEach { config ->
+                            runCatching {
+                                val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
+
+                                // 如果配置了向量模型，使用向量召回日记摘要
+                                if (config.embeddingModelId != null && queryText.isNotBlank()) {
+                                    val embeddingModel = settings.findModelById(config.embeddingModelId)
+                                    if (embeddingModel != null) {
+                                        val embeddingProvider = embeddingModel.findProvider(settings.providers)
+                                        if (embeddingProvider != null) {
+                                            val embeddingProviderImpl = providerManager.getProviderByType(embeddingProvider)
+                                            val embedResult = embeddingProviderImpl.generateEmbedding(
+                                                providerSetting = embeddingProvider,
+                                                params = EmbeddingGenerationParams(
+                                                    model = embeddingModel,
+                                                    input = listOf(queryText),
+                                                )
+                                            )
+                                            val queryEmbedding = embedResult.embeddings.firstOrNull()
+                                            if (queryEmbedding != null) {
+                                                val recalledSummaries = service.vectorRecallSummaries(
+                                                    queryEmbedding = queryEmbedding,
+                                                    assistantId = assistant.id.toString(),
+                                                    count = config.recallCount,
+                                                ).getOrDefault(emptyList())
+                                                recalledSummaries.forEach { summary ->
+                                                    allRecalled.add(summary.content)
+                                                }
+                                                Log.d(TAG, "Vector recall ${recalledSummaries.size} summaries from ${config.name}")
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    // 回退：文本召回聊天记录
+                                    val recalledMessages = if (queryText.isNotBlank()) {
+                                        service.searchMessages(
+                                            assistantId = assistant.id.toString(),
+                                            keyword = queryText,
+                                            limit = config.recallCount,
+                                        ).getOrDefault(emptyList())
+                                    } else {
+                                        service.queryLatestMessages(
+                                            assistantId = assistant.id.toString(),
+                                            limit = config.recallCount,
+                                        ).getOrDefault(emptyList())
+                                    }
+                                    recalledMessages.forEach { msg ->
+                                        val prefix = when (msg.role) {
+                                            "assistant" -> "AI"
+                                            "user" -> "用户"
+                                            else -> msg.role
+                                        }
+                                        allRecalled.add("[$prefix] ${msg.content}")
+                                    }
+                                }
+                            }.onFailure {
+                                Log.w(TAG, "External memory recall failed for ${config.name}", it)
+                            }
+                        }
+                        if (allRecalled.isNotEmpty()) {
+                            appendLine()
+                            appendLine("## 外置记忆库")
+                            allRecalled.reversed().forEachIndexed { index, memory ->
+                                appendLine("${index + 1}. ${memory}")
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "External memory recall failed", e)
+                }
+
                 if (assistant.enableRecentChatsReference) {
                     appendLine()
                     append(buildRecentChatsPrompt(assistant, conversationRepo))

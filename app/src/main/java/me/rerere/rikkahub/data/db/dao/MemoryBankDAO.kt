@@ -103,4 +103,18 @@ interface MemoryBankDAO {
 
     @Query("UPDATE memory_bank SET vector_status = :status, vector_retry_count = :retryCount WHERE id = :id")
     suspend fun updateVectorStatus(id: Int, status: String, retryCount: Int)
+
+    // ===== Vector recall queries =====
+
+    /** 获取所有已向量化且 embedding 非空的记忆 */
+    @Query("SELECT * FROM memory_bank WHERE vector_status = 'done' AND embedding IS NOT NULL AND embedding != '' ORDER BY created_at DESC")
+    suspend fun getAllVectorizedMemories(): List<MemoryBankEntity>
+
+    /** 获取指定助手已向量化且 embedding 非空的记忆 */
+    @Query("SELECT * FROM memory_bank WHERE assistant_id = :assistantId AND vector_status = 'done' AND embedding IS NOT NULL AND embedding != '' ORDER BY created_at DESC")
+    suspend fun getVectorizedMemoriesByAssistant(assistantId: String): List<MemoryBankEntity>
+
+    /** 更新指定记录的 embedding 和 vector_status */
+    @Query("UPDATE memory_bank SET embedding = :embedding, vector_status = :status WHERE id = :id")
+    suspend fun updateEmbedding(id: Int, embedding: String, status: String)
 }

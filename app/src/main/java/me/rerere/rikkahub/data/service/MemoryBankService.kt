@@ -1,19 +1,25 @@
 package me.rerere.rikkahub.data.service
 
 import android.content.Context
+import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.withContext
+import kotlinx.serialization.json.Json
 import me.rerere.rikkahub.data.db.dao.MemoryBankDAO
 import me.rerere.rikkahub.data.db.entity.MemoryBankEntity
 import okhttp3.OkHttpClient
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import kotlin.math.sqrt
+
+private const val TAG = "MemoryBankService"
 
 class MemoryBankService(
     private val memoryBankDAO: MemoryBankDAO,
     private val okHttpClient: OkHttpClient,
-    private val context: Context
+    private val context: Context,
 ) {
     data class MemoryStats(
         val total: Int = 0,
@@ -25,7 +31,7 @@ class MemoryBankService(
         val failedCount: Int = 0,
     )
 
-    val recallCount: Int = 5
+    val recallCount: Int = 3
 
     suspend fun getAssistantIds(): List<String> = withContext(Dispatchers.IO) {
         memoryBankDAO.getDistinctAssistantIds()
@@ -138,5 +144,108 @@ class MemoryBankService(
         } else {
             memoryBankDAO.getRecentMemories(count)
         }
+    }
+
+    // ==================== Vector Recall ====================
+
+    /**
+     * 向量召回：根据 query embedding 召回最相关的 N 条记忆
+     * 在内存中计算余弦相似度
+     */
+    suspend fun vectorRecall(
+        queryEmbedding: List<Float>,
+        assistantId: String? = null,
+        count: Int = recallCount
+    ): List<MemoryBankEntity> = withContext(Dispatchers.IO) {
+        val candidates = if (assistantId != null) {
+            memoryBankDAO.getVectorizedMemoriesByAssistant(assistantId)
+        } else {
+            memoryBankDAO.getAllVectorizedMemories()
+        }
+
+        val scored = candidates.mapNotNull { memory ->
+            val emb = parseEmbedding(memory.embedding) ?: return@mapNotNull null
+            if (emb.size != queryEmbedding.size) return@mapNotNull null
+            val similarity = cosineSimilarity(queryEmbedding, emb)
+            memory to similarity
+        }
+
+        scored.sortedByDescending { it.second }
+            .take(count)
+            .map { it.first }
+    }
+
+    /**
+     * 保存自动总结到记忆库
+     */
+    suspend fun saveAutoSummary(
+        content: String,
+        assistantId: String?,
+        conversationId: String? = null
+    ): MemoryBankEntity? = withContext(Dispatchers.IO) {
+        try {
+            val entity = MemoryBankEntity(
+                content = content,
+                type = "auto_summary",
+                assistantId = assistantId,
+                conversationId = conversationId,
+                vectorStatus = "skipped"
+            )
+            val id = memoryBankDAO.insertMemory(entity).toInt()
+            entity.copy(id = id)
+        } catch (e: Exception) {
+            Log.e(TAG, "saveAutoSummary failed", e)
+            null
+        }
+    }
+
+    /**
+     * 保存单条聊天记录到记忆库
+     */
+    suspend fun saveChatMessage(
+        content: String,
+        role: String,
+        assistantId: String?,
+        conversationId: String? = null
+    ): MemoryBankEntity? = withContext(Dispatchers.IO) {
+        try {
+            val entity = MemoryBankEntity(
+                content = content,
+                type = "message",
+                role = role,
+                assistantId = assistantId,
+                conversationId = conversationId,
+                vectorStatus = "skipped"
+            )
+            val id = memoryBankDAO.insertMemory(entity).toInt()
+            entity.copy(id = id)
+        } catch (e: Exception) {
+            Log.e(TAG, "saveChatMessage failed", e)
+            null
+        }
+    }
+
+    // ==================== Helper Methods ====================
+
+    private fun parseEmbedding(embeddingJson: String?): List<Float>? {
+        if (embeddingJson.isNullOrBlank()) return null
+        return try {
+            Json.decodeFromString<List<Float>>(embeddingJson)
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    private fun cosineSimilarity(a: List<Float>, b: List<Float>): Float {
+        var dot = 0.0
+        var normA = 0.0
+        var normB = 0.0
+        for (i in a.indices) {
+            dot += a[i] * b[i]
+            normA += a[i] * a[i]
+            normB += b[i] * b[i]
+        }
+        val denom = sqrt(normA) * sqrt(normB)
+        return if (denom == 0.0) 0f else (dot / denom).toFloat()
     }
 }

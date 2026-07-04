@@ -1,5 +1,6 @@
 package me.rerere.rikkahub.plugin.provider
 
+import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
@@ -11,6 +12,7 @@ import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.ai.tools.ToolNaming
 import me.rerere.rikkahub.plugin.loader.LoadedPlugin
 import me.rerere.rikkahub.plugin.loader.PluginLoader
+import me.rerere.rikkahub.plugin.manager.PluginManager
 import me.rerere.rikkahub.plugin.model.PluginToolDefinition
 
 /**
@@ -18,7 +20,8 @@ import me.rerere.rikkahub.plugin.model.PluginToolDefinition
  * 将插件工具转换为AI可用的Tool对象
  */
 class PluginToolProvider(
-    private val pluginLoader: PluginLoader
+    private val pluginLoader: PluginLoader,
+    private val pluginManager: PluginManager
 ) {
     private val json = Json {
         ignoreUnknownKeys = true
@@ -27,8 +30,11 @@ class PluginToolProvider(
 
     /**
      * 获取所有插件提供的工具
+     * 会等待插件初始化完成，确保竞态条件下不会返回空列表
      */
     fun getTools(): List<Tool> {
+        // 等待插件初始化完成，避免竞态条件导致工具列表为空
+        runBlocking { pluginManager.awaitInitialization() }
         return pluginLoader.getAllLoadedPlugins().flatMap { plugin ->
             plugin.info.manifest.tools.map { toolDef ->
                 createTool(plugin, toolDef)
@@ -40,6 +46,7 @@ class PluginToolProvider(
      * 获取指定插件的工具
      */
     fun getPluginTools(pluginId: String): List<Tool> {
+        runBlocking { pluginManager.awaitInitialization() }
         val plugin = pluginLoader.getLoadedPlugin(pluginId) ?: return emptyList()
         return plugin.info.manifest.tools.map { toolDef ->
             createTool(plugin, toolDef)
@@ -140,6 +147,9 @@ class PluginToolProvider(
      * 后续元素: 各插件 manifest.promptTemplate 中开启了 inject_as_prompt 的模板(保留原机制).
      */
     fun getPluginPromptInjections(): List<String> {
+        // 等待插件初始化完成，避免竞态条件
+        runBlocking { pluginManager.awaitInitialization() }
+        
         val pluginsWithTools = pluginLoader.getAllLoadedPlugins()
             .filter { it.info.manifest.tools.isNotEmpty() }
 

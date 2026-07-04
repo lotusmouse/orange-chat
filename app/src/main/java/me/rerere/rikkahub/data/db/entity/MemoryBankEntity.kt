@@ -48,6 +48,10 @@ data class MemoryBankEntity(
     /** 向量化重试次数 */
     @ColumnInfo("vector_retry_count")
     val vectorRetryCount: Int = 0,
+
+    /** Embedding 向量（JSON 格式的浮点数组） */
+    @ColumnInfo("embedding")
+    val embedding: String? = null,
 )
 
 

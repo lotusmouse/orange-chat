@@ -38,7 +38,9 @@ import kotlinx.serialization.json.jsonObject
 import me.rerere.ai.core.MessageRole
 import me.rerere.ai.core.ReasoningLevel
 import me.rerere.ai.core.Tool
+import me.rerere.ai.provider.Model
 import me.rerere.ai.provider.ModelAbility
+import me.rerere.rikkahub.data.service.MemoryBankService
 import me.rerere.ai.provider.ProviderManager
 import me.rerere.ai.provider.TextGenerationParams
 import me.rerere.ai.ui.ToolApprovalState
@@ -153,6 +155,7 @@ class ChatService(
     private val pluginToolProvider: PluginToolProvider,
     private val pluginLoader: PluginLoader,
     private val workspaceRepository: WorkspaceRepository,
+    private val memoryBankService: MemoryBankService,
 ) {
     // workspace 系统提示注入 (依赖 workspaceRepository, 故在类内构造)
     private val workspaceReminderTransformer = WorkspaceReminderTransformer(workspaceRepository)
@@ -372,6 +375,38 @@ class ChatService(
                     pluginLoader.callEvent("message_sent", eventData)
                 } catch (e: Exception) {
                     Log.w(TAG, "Failed to trigger message_sent event", e)
+                }
+
+                // 保存用户消息到外置记忆库
+                try {
+                    val settings = settingsStore.settingsFlowRaw.first()
+                    val externalMemoryConfigs = settings.externalMemories.filter {
+                        it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
+                    }
+                    if (externalMemoryConfigs.isNotEmpty()) {
+                        val messageText = processedContent.mapNotNull { part ->
+                            if (part is UIMessagePart.Text) part.text else null
+                        }.joinToString("\n")
+                        kotlinx.coroutines.coroutineScope {
+                            externalMemoryConfigs.forEach { config ->
+                                launch {
+                                    runCatching {
+                                        val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
+                                        service.saveMessage(
+                                            assistantId = assistant.id.toString(),
+                                            conversationId = conversationId.toString(),
+                                            role = "user",
+                                            content = messageText,
+                                        )
+                                    }.onFailure {
+                                        Log.w(TAG, "Failed to save user message to external memory ${config.name}", it)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed to save user message to external memory", e)
                 }
 
                 // 开始补全
@@ -700,6 +735,38 @@ addAll(localTools.getTools(assistant.localTools))
             }
             launchWithConversationReference(conversationId) {
                 generateSuggestion(conversationId, finalConversation)
+            }
+
+            // 保存 AI 回复到外置记忆库
+            try {
+                val externalMemoryConfigs = settings.externalMemories.filter {
+                    it.enabled && it.id in assistant.externalMemoryIds && it.autoSaveMessages
+                }
+                if (externalMemoryConfigs.isNotEmpty()) {
+                    val lastAssistantMessage = finalConversation.currentMessages.lastOrNull { it.role == MessageRole.ASSISTANT }
+                    val messageText = lastAssistantMessage?.toText() ?: ""
+                    if (messageText.isNotBlank()) {
+                        kotlinx.coroutines.coroutineScope {
+                            externalMemoryConfigs.forEach { config ->
+                                launch {
+                                    runCatching {
+                                        val service = me.rerere.rikkahub.data.service.ExternalMemoryService(config)
+                                        service.saveMessage(
+                                            assistantId = assistant.id.toString(),
+                                            conversationId = conversationId.toString(),
+                                            role = "assistant",
+                                            content = messageText,
+                                        )
+                                    }.onFailure {
+                                        Log.w(TAG, "Failed to save assistant message to external memory ${config.name}", it)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed to save assistant message to external memory", e)
             }
         }
     }

@@ -92,6 +92,7 @@ import me.rerere.rikkahub.ui.pages.chat.ChatPage
 import me.rerere.rikkahub.ui.pages.debug.DebugPage
 import me.rerere.rikkahub.ui.pages.developer.DeveloperPage
 import me.rerere.rikkahub.ui.pages.extensions.ExtensionsPage
+import me.rerere.rikkahub.ui.pages.extensions.ExternalMemoriesPage
 import me.rerere.rikkahub.ui.pages.extensions.PromptPage
 import me.rerere.rikkahub.ui.pages.extensions.QuickMessagesPage
 import me.rerere.rikkahub.ui.pages.extensions.SkillDetailPage
@@ -491,6 +492,10 @@ class RouteActivity : ComponentActivity() {
                                 QuickMessagesPage()
                             }
 
+                            entry<Screen.ExternalMemories> {
+                                ExternalMemoriesPage()
+                            }
+
                             entry<Screen.Prompts> {
                                 PromptPage()
                             }
@@ -796,4 +801,7 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object EmojiPicker : Screen
+
+    @Serializable
+    data object ExternalMemories : Screen
 }

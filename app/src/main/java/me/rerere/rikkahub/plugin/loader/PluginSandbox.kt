@@ -728,6 +728,7 @@ function fetch(url, options) {
  
     fun destroy() {
         exportedFunctionNames.clear()
+        quickJSContext?.destroy()
         quickJSContext = null
         Log.d(TAG, "Sandbox destroyed")
     }

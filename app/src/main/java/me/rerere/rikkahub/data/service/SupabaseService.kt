@@ -9,6 +9,8 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import java.net.HttpURLConnection
@@ -55,23 +57,23 @@ data class SupabaseNotificationData(
 
 @Serializable
 data class SupabaseHealthData(
-    val heartRate: Int? = null,          // 当前心率（最新一条采样）
-    val stepsToday: Int? = null,         // 今日步数
-    val caloriesToday: Int? = null,      // 今日卡路里
-    val hrRestingToday: Int? = null,     // 今日静息心率
-    val hrMaxToday: Int? = null,         // 今日最高心率
-    val hrMinToday: Int? = null,         // 今日最低心率
-    val hrAvgToday: Int? = null,         // 今日平均心率
-    val spo2: Int? = null,               // 最新血氧
-    val spo2AvgToday: Int? = null,       // 今日平均血氧
-    val stress: Int? = null,             // 最新压力值
-    val stressAvgToday: Int? = null,     // 今日平均压力
-    val sleepStartMs: Long? = null,      // 最近一次入睡时间（毫秒时间戳）
-    val sleepWakeupMs: Long? = null,     // 最近一次醒来时间（毫秒时间戳）
-    val sleepTotalMinutes: Int? = null,  // 总睡眠时长（分钟）
-    val sleepDeepMinutes: Int? = null,   // 深睡时长（分钟）
-    val sleepLightMinutes: Int? = null,  // 浅睡时长（分钟）
-    val sleepRemMinutes: Int? = null,    // REM 时长（分钟）
+    val heartRate: Int? = null,
+    val stepsToday: Int? = null,
+    val caloriesToday: Int? = null,
+    val hrRestingToday: Int? = null,
+    val hrMaxToday: Int? = null,
+    val hrMinToday: Int? = null,
+    val hrAvgToday: Int? = null,
+    val spo2: Int? = null,
+    val spo2AvgToday: Int? = null,
+    val stress: Int? = null,
+    val stressAvgToday: Int? = null,
+    val sleepStartMs: Long? = null,
+    val sleepWakeupMs: Long? = null,
+    val sleepTotalMinutes: Int? = null,
+    val sleepDeepMinutes: Int? = null,
+    val sleepLightMinutes: Int? = null,
+    val sleepRemMinutes: Int? = null,
 )
 
 class SupabaseService(
@@ -164,16 +166,108 @@ class SupabaseService(
 
         return JsonObject(map)
     }
+
+    suspend fun insertChatMessage(
+        assistantId: String,
+        conversationId: String,
+        role: String,
+        content: String,
+        tableName: String = "chat_messages"
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (supabaseUrl.isBlank() || supabaseApiKey.isBlank()) {
+                throw IllegalArgumentException("Supabase URL and API Key must not be blank")
+            }
+
+            val baseUrl = supabaseUrl.trimEnd('/')
+            val url = URL("$baseUrl/rest/v1/$tableName")
+
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            val jsonString = buildJsonObject {
+                put("assistant_id", JsonPrimitive(assistantId))
+                put("conversation_id", JsonPrimitive(conversationId))
+                put("role", JsonPrimitive(role))
+                put("content", JsonPrimitive(content))
+                put("created_at", JsonPrimitive(sdf.format(java.util.Date())))
+            }.toString()
+
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("apikey", supabaseApiKey)
+                setRequestProperty("Authorization", "Bearer $supabaseApiKey")
+                setRequestProperty("Prefer", "return=minimal")
+                doOutput = true
+                connectTimeout = 15000
+                readTimeout = 15000
+            }
+
+            connection.outputStream.bufferedWriter().use { writer ->
+                writer.write(jsonString)
+                writer.flush()
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val errorBody = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
+                throw Exception("Supabase API error ($responseCode): $errorBody")
+            }
+
+            Log.d(TAG, "Successfully inserted chat message into $tableName")
+            Unit
+        }
+    }
+
+    suspend fun insertMemorySummary(
+        assistantId: String,
+        conversationId: String,
+        content: String,
+        tableName: String = "memory_summaries"
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            if (supabaseUrl.isBlank() || supabaseApiKey.isBlank()) {
+                throw IllegalArgumentException("Supabase URL and API Key must not be blank")
+            }
+
+            val baseUrl = supabaseUrl.trimEnd('/')
+            val url = URL("$baseUrl/rest/v1/$tableName")
+
+            val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
+            val jsonString = buildJsonObject {
+                put("assistant_id", JsonPrimitive(assistantId))
+                put("conversation_id", JsonPrimitive(conversationId))
+                put("content", JsonPrimitive(content))
+                put("created_at", JsonPrimitive(sdf.format(java.util.Date())))
+            }.toString()
+
+            val connection = (url.openConnection() as HttpURLConnection).apply {
+                requestMethod = "POST"
+                setRequestProperty("Content-Type", "application/json")
+                setRequestProperty("apikey", supabaseApiKey)
+                setRequestProperty("Authorization", "Bearer $supabaseApiKey")
+                setRequestProperty("Prefer", "return=minimal")
+                doOutput = true
+                connectTimeout = 15000
+                readTimeout = 15000
+            }
+
+            connection.outputStream.bufferedWriter().use { writer ->
+                writer.write(jsonString)
+                writer.flush()
+            }
+
+            val responseCode = connection.responseCode
+            if (responseCode !in 200..299) {
+                val errorBody = connection.errorStream?.bufferedReader()?.readText() ?: "Unknown error"
+                throw Exception("Supabase API error ($responseCode): $errorBody")
+            }
+
+            Log.d(TAG, "Successfully inserted memory summary into $tableName")
+            Unit
+        }
+    }
 }
 
-/**
- * 轻量插入：只写入 timestamp + device_event，不走 collectAndUpload 的全量采集。
- * 用于开机/亮屏/黑屏事件推送，一天可能触发几十次，全量采集太费电费流量。
- *
- * 调用方需自行先判断 systemToolsSetting.supabaseEnabled && url/key 非空，
- * 不满足条件应跳过（本方法内部会因 url/key 空白抛 IllegalArgumentException，
- * 由 runCatching 捕获并以 Result 返回，不会向上抛异常）。
- */
 suspend fun SupabaseService.insertDeviceEvent(eventType: String): Result<Unit> {
     return runCatching {
         val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())

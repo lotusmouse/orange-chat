@@ -71,6 +71,9 @@ data class SystemToolsSetting(
         if (batteryEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Battery)
         if (musicEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Music)
         if (smsEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Sms)
+        if (supabaseEnabled && supabaseUrl.isNotBlank() && supabaseApiKey.isNotBlank()) {
+            options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SupabaseQuery)
+        }
         return options
     }
 }

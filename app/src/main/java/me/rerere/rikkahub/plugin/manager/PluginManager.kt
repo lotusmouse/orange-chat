@@ -2,13 +2,13 @@ package me.rerere.rikkahub.plugin.manager
  
 import android.content.Context
 import android.net.Uri
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
@@ -39,11 +39,29 @@ class PluginManager(
  
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
- 
+
+    /**
+     * 用于跟踪首次初始化是否完成
+     * 解决竞态条件：ChatService 在插件还没加载完时就调用 getTools()
+     */
+    private val initializationDeferred = CompletableDeferred<Unit>()
+
     init {
         CoroutineScope(Dispatchers.IO).launch {
-            refreshPlugins()
+            try {
+                refreshPlugins()
+            } finally {
+                initializationDeferred.complete(Unit)
+            }
         }
+    }
+
+    /**
+     * 等待插件初始化完成
+     * 在需要确保插件已加载的场景调用（如 ChatService 发送消息前）
+     */
+    suspend fun awaitInitialization() {
+        initializationDeferred.await()
     }
  
     suspend fun refreshPlugins() {
@@ -69,10 +87,17 @@ class PluginManager(
  
     private suspend fun loadPlugin(plugin: PluginInfo) {
         loader.loadPlugin(plugin).fold(
-            onSuccess = { },
-            onFailure = { error ->
+            onSuccess = {
+                // 加载成功时清除之前的错误信息
                 updatePluginState(plugin.manifest.id) {
-                    it.copy(isEnabled = false, loadError = error.message)
+                    it.copy(loadError = null)
+                }
+            },
+            onFailure = { error ->
+                // 加载失败时不自动禁用插件，保留 isEnabled = true 和错误信息
+                // 这样下次 refreshPlugins() 时可以自动重试加载
+                updatePluginState(plugin.manifest.id) {
+                    it.copy(loadError = error.message)
                 }
             }
         )
@@ -110,12 +135,15 @@ class PluginManager(
     suspend fun togglePlugin(pluginId: String, enabled: Boolean) {
         val plugin = _plugins.value.find { it.manifest.id == pluginId } ?: return
         if (enabled) {
-            loadPlugin(plugin.copy(isEnabled = true))
+            // 重新加载插件（先清除错误状态）
+            val pluginToLoad = plugin.copy(isEnabled = true, loadError = null)
+            loader.unloadPlugin(pluginId)
+            loadPlugin(pluginToLoad)
         } else {
             loader.unloadPlugin(pluginId)
         }
         repository.setPluginEnabled(pluginId, enabled)
-        updatePluginState(pluginId) { it.copy(isEnabled = enabled) }
+        updatePluginState(pluginId) { it.copy(isEnabled = enabled, loadError = null) }
         DailySummaryService.rescheduleIfEnabled(context)
     }
  
@@ -156,4 +184,3 @@ class PluginManager(
         }
     }
 }
- 

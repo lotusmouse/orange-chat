@@ -10,7 +10,10 @@ import androidx.room.withTransaction
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import me.rerere.ai.ui.UIMessage
+import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.db.AppDatabase
 import me.rerere.rikkahub.data.db.fts.MessageFtsManager
 import me.rerere.rikkahub.data.db.dao.ConversationDAO
@@ -376,7 +379,60 @@ class ConversationRepository(
         }
         messageNodeDAO.insertAll(entities)
     }
+
+    /**
+     * 获取指定日期范围内的所有聊天记录（用于日记总结）
+     * 从 message_node 表读取，不依赖 memory_bank
+     */
+    suspend fun getMessagesByDateRange(startDate: String, endDate: String): List<DatedMessage> = withContext(Dispatchers.IO) {
+        val allConversationIds = conversationDAO.getAllIds()
+        val result = mutableListOf<DatedMessage>()
+
+        for (conversationId in allConversationIds) {
+            val nodes = try {
+                loadMessageNodes(conversationId)
+            } catch (e: Exception) {
+                continue
+            }
+
+            for (node in nodes) {
+                // 只取选中的消息（selectIndex 对应的）
+                val selectedMessage = node.messages.getOrNull(node.selectIndex) ?: continue
+                val dateStr = selectedMessage.createdAt.toString().take(10) // yyyy-MM-dd
+
+                if (dateStr >= startDate && dateStr <= endDate) {
+                    val text = selectedMessage.parts.filterIsInstance<UIMessagePart.Text>()
+                        .joinToString("\n") { it.text }
+                        .trim()
+                    if (text.isNotBlank()) {
+                        result.add(
+                            DatedMessage(
+                                date = dateStr,
+                                role = selectedMessage.role.name.lowercase(),
+                                content = text,
+                                assistantId = null, // 无法直接从消息获取
+                                conversationId = conversationId
+                            )
+                        )
+                    }
+                }
+            }
+        }
+
+        result.sortedBy { it.date }
+    }
 }
+
+/**
+ * 带日期的聊天记录条目（用于日记总结）
+ */
+data class DatedMessage(
+    val date: String,
+    val role: String,
+    val content: String,
+    val assistantId: String?,
+    val conversationId: String
+)
 
 /**
  * 轻量级的会话查询结果，不包含 nodes 和 suggestions 字段
