@@ -555,6 +555,20 @@ class RouteActivity : ComponentActivity() {
                             entry<Screen.SettingPlugins> {
                                 val nav = LocalNavController.current
                                 me.rerere.rikkahub.plugin.ui.PluginManagePage(
+                                    onNavigateToFolder = { folderId ->
+                                        nav.navigate(Screen.PluginFolder(folderId))
+                                    },
+                                    onNavigateToDetail = { pluginId ->
+                                        nav.navigate(Screen.PluginDetail(pluginId))
+                                    }
+                                )
+                            }
+
+                            entry<Screen.PluginFolder> { key ->
+                                val nav = LocalNavController.current
+                                me.rerere.rikkahub.plugin.ui.PluginFolderPage(
+                                    folderId = key.folderId,
+                                    onNavigateBack = { backStack.removeLastOrNull() },
                                     onNavigateToDetail = { pluginId ->
                                         nav.navigate(Screen.PluginDetail(pluginId))
                                     }
@@ -808,6 +822,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data class PluginDetail(val pluginId: String) : Screen
+
+    @Serializable
+    data class PluginFolder(val folderId: String) : Screen
 
     @Serializable
     data class PluginWebView(val pluginId: String, val entryPath: String) : Screen

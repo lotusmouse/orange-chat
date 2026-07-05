@@ -1,6 +1,8 @@
 package me.rerere.rikkahub.plugin.ui
 
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -16,6 +18,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -29,6 +33,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,8 +58,10 @@ import me.rerere.hugeicons.stroke.ArrowLeft01
 import me.rerere.hugeicons.stroke.ArrowRight01
 import me.rerere.hugeicons.stroke.CheckmarkCircle01
 import me.rerere.hugeicons.stroke.Database02
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.plugin.model.PluginConfigField
+import me.rerere.rikkahub.plugin.model.PluginFolder
 import me.rerere.rikkahub.plugin.model.PluginInfo
 import me.rerere.rikkahub.plugin.model.PluginToolDefinition
 import me.rerere.rikkahub.ui.components.ai.ModelSelector
@@ -96,6 +103,8 @@ fun PluginDetailPage(
         configValues = plugin.config.toMutableMap()
     }
 
+    val folders by viewModel.folders.collectAsState()
+
     Scaffold(
         topBar = {
             TopAppBar(
@@ -126,6 +135,16 @@ fun PluginDetailPage(
                 SupabaseSetupInstructions()
             }
 
+            Spacer(modifier = Modifier.height(24.dp))
+
+            // 文件夹归属选择器
+            FolderSelector(
+                currentFolderId = plugin.folderId,
+                folders = folders,
+                onSelect = { folderId ->
+                    viewModel.movePluginToFolder(pluginId, folderId)
+                }
+            )
             Spacer(modifier = Modifier.height(24.dp))
 
             // 自定义页面入口（声明式 UI 优先于 WebView）
@@ -201,6 +220,70 @@ fun PluginDetailPage(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+/**
+ * 文件夹归属选择器
+ * 用于将当前插件移动到不同文件夹
+ */
+@Composable
+private fun FolderSelector(
+    currentFolderId: String?,
+    folders: List<PluginFolder>,
+    onSelect: (String?) -> Unit
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val currentFolder = folders.find { it.id == currentFolderId }
+    val displayText = currentFolder?.name ?: "未分组"
+
+    Box(modifier = Modifier.fillMaxWidth()) {
+        OutlinedTextField(
+            value = displayText,
+            onValueChange = { },
+            readOnly = true,
+            label = { Text("所属文件夹") },
+            supportingText = { Text("点击选择文件夹，移动插件到其他分组") },
+            leadingIcon = {
+                Icon(
+                    imageVector = HugeIcons.Folder01,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+            },
+            trailingIcon = {
+                IconButton(onClick = { expanded = !expanded }) {
+                    Icon(
+                        imageVector = HugeIcons.ArrowRight01,
+                        contentDescription = null
+                    )
+                }
+            },
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { expanded = true }
+        )
+        DropdownMenu(
+            expanded = expanded,
+            onDismissRequest = { expanded = false }
+        ) {
+            DropdownMenuItem(
+                text = { Text("未分组") },
+                onClick = {
+                    onSelect(null)
+                    expanded = false
+                }
+            )
+            folders.forEach { folder ->
+                DropdownMenuItem(
+                    text = { Text(folder.name) },
+                    onClick = {
+                        onSelect(folder.id)
+                        expanded = false
+                    }
+                )
+            }
         }
     }
 }

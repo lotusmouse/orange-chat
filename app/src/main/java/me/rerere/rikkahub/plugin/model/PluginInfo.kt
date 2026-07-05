@@ -30,7 +30,9 @@ data class PluginInfo(
     /**
      * 加载错误信息（如果有）
      */
-    val loadError: String? = null
+    val loadError: String? = null,
+
+    val folderId: String? = null
 ) {
     /**
      * 获取配置值，如果不存在则返回默认值

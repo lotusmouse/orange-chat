@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonElement
 import me.rerere.rikkahub.plugin.manager.PluginManager
+import me.rerere.rikkahub.plugin.model.PluginFolder
 import me.rerere.rikkahub.plugin.model.PluginInfo
 
 /**
@@ -22,6 +23,8 @@ class PluginViewModel(
 
     // 加载状态
     val isLoading: StateFlow<Boolean> = pluginManager.isLoading
+
+    val folders: StateFlow<List<PluginFolder>> = pluginManager.folders
 
     // 导入状态
     private val _importState = MutableStateFlow<ImportState>(ImportState.Idle)
@@ -120,6 +123,68 @@ class PluginViewModel(
      */
     fun resetOperationState() {
         _operationState.value = OperationState.Idle
+    }
+
+    fun createFolder(name: String) {
+        viewModelScope.launch {
+            _operationState.value = OperationState.Loading
+            try {
+                pluginManager.createFolder(name)
+                _operationState.value = OperationState.Success("ok")
+            } catch (e: Exception) {
+                _operationState.value = OperationState.Error(e.message ?: "err")
+            }
+        }
+    }
+
+    fun renameFolder(folderId: String, newName: String) {
+        viewModelScope.launch {
+            _operationState.value = OperationState.Loading
+            try {
+                pluginManager.renameFolder(folderId, newName)
+                _operationState.value = OperationState.Success("ok")
+            } catch (e: Exception) {
+                _operationState.value = OperationState.Error(e.message ?: "err")
+            }
+        }
+    }
+
+    fun deleteFolder(folderId: String) {
+        viewModelScope.launch {
+            _operationState.value = OperationState.Loading
+            try {
+                pluginManager.deleteFolder(folderId)
+                _operationState.value = OperationState.Success("ok")
+            } catch (e: Exception) {
+                _operationState.value = OperationState.Error(e.message ?: "err")
+            }
+        }
+    }
+
+    fun movePluginToFolder(pluginId: String, folderId: String?) {
+        viewModelScope.launch {
+            pluginManager.movePluginToFolder(pluginId, folderId)
+        }
+    }
+
+    fun importPlugin(uri: android.net.Uri, folderId: String?) {
+        viewModelScope.launch {
+            _importState.value = ImportState.Loading
+            try {
+                val result = pluginManager.importPlugin(uri, folderId)
+                _importState.value = if (result.isSuccess) {
+                    ImportState.Success(result.getOrThrow())
+                } else {
+                    ImportState.Error(result.exceptionOrNull()?.message ?: "Unknown error")
+                }
+            } catch (e: Exception) {
+                _importState.value = ImportState.Error(e.message ?: "Unknown error")
+            }
+        }
+    }
+
+    fun getPluginsByFolder(folderId: String?): List<PluginInfo> {
+        return pluginManager.getPluginsByFolder(folderId)
     }
 
     /**

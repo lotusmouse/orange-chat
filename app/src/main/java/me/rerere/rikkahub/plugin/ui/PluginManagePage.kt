@@ -9,6 +9,8 @@ import android.util.Log
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -32,6 +34,7 @@ import androidx.compose.material3.ExtendedFloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -58,33 +61,40 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Delete02
+import me.rerere.hugeicons.stroke.Folder01
 import me.rerere.hugeicons.stroke.PlusSign
 import me.rerere.hugeicons.stroke.Reload
+import me.rerere.rikkahub.plugin.model.PluginFolder
 import me.rerere.rikkahub.plugin.model.PluginInfo
 import org.koin.androidx.compose.koinViewModel
 
 private const val TAG = "PluginManagePage"
 
 /**
- * 插件管理页面
+ * 插件管理页面（文件夹列表页）
+ * 显示文件夹列表和未分组插件，点进文件夹才看到插件
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun PluginManagePage(
+    onNavigateToFolder: (String) -> Unit,
     onNavigateToDetail: (String) -> Unit,
     viewModel: PluginViewModel = koinViewModel()
 ) {
     val context = LocalContext.current
     val plugins by viewModel.plugins.collectAsState()
+    val folders by viewModel.folders.collectAsState()
     val isLoading by viewModel.isLoading.collectAsState()
     val importState by viewModel.importState.collectAsState()
     val operationState by viewModel.operationState.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
 
-    // 存储权限状态
     val hasStoragePermission = remember { mutableStateOf(checkStoragePermission()) }
 
-    // 监听 ON_RESUME：从系统设置授权页返回后自动刷新权限状态
+    var showCreateFolderDialog by remember { mutableStateOf(false) }
+    var showRenameFolderDialog by remember { mutableStateOf<PluginFolder?>(null) }
+    var showDeleteFolderConfirm by remember { mutableStateOf<PluginFolder?>(null) }
+
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -96,14 +106,12 @@ fun PluginManagePage(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    // 文件选择器
     val filePickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri ->
         uri?.let { viewModel.importPlugin(it) }
     }
 
-    // 监听导入状态
     LaunchedEffect(importState) {
         when (importState) {
             is PluginViewModel.ImportState.Success -> {
@@ -120,7 +128,6 @@ fun PluginManagePage(
         }
     }
 
-    // 监听操作状态
     LaunchedEffect(operationState) {
         when (operationState) {
             is PluginViewModel.OperationState.Success -> {
@@ -139,7 +146,6 @@ fun PluginManagePage(
         }
     }
 
-    // 有权限时才加载插件列表（权限获得后也会重新触发加载）
     LaunchedEffect(hasStoragePermission.value) {
         if (hasStoragePermission.value) {
             viewModel.refreshPlugins()
@@ -160,12 +166,11 @@ fun PluginManagePage(
             )
         },
         floatingActionButton = {
-            // 无权限时隐藏 FAB，避免导入操作也因权限失败
             if (hasStoragePermission.value) {
                 ExtendedFloatingActionButton(
-                    onClick = { filePickerLauncher.launch("application/zip") },
+                    onClick = { showCreateFolderDialog = true },
                     icon = { Icon(HugeIcons.PlusSign, null) },
-                    text = { Text("导入插件") }
+                    text = { Text("新建文件夹") }
                 )
             }
         },
@@ -177,40 +182,24 @@ fun PluginManagePage(
                 .padding(padding)
         ) {
             if (!hasStoragePermission.value) {
-                // 强制全屏拦截，未授权时完全屏蔽插件内容
                 StoragePermissionGate(
                     onGrantClick = { openStoragePermissionSettings(context) }
                 )
-            } else if (isLoading && plugins.isEmpty()) {
+            } else if (isLoading && plugins.isEmpty() && folders.isEmpty()) {
                 CircularProgressIndicator(modifier = Modifier.align(Alignment.Center))
-            } else if (plugins.isEmpty()) {
-                EmptyPluginState(
-                    onImportClick = { filePickerLauncher.launch("application/zip") }
-                )
             } else {
-                LazyColumn(
-                    modifier = Modifier.fillMaxSize(),
-                    contentPadding = PaddingValues(
-                        start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp
-                    ),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    item {
-                        PluginDirectoryInfo(
-                            directory = viewModel.getPluginsDirectory().absolutePath
-                        )
-                    }
-                    items(items = plugins, key = { it.manifest.id }) { plugin ->
-                        PluginCard(
-                            plugin = plugin,
-                            onClick = { onNavigateToDetail(plugin.manifest.id) },
-                            onToggle = { enabled ->
-                                viewModel.togglePlugin(plugin.manifest.id, enabled)
-                            },
-                            onDelete = { viewModel.deletePlugin(plugin.manifest.id) }
-                        )
-                    }
-                }
+                PluginFolderContent(
+                    folders = folders,
+                    plugins = plugins,
+                    onFolderClick = { folder -> onNavigateToFolder(folder.id) },
+                    onFolderLongClick = { folder -> showRenameFolderDialog = folder },
+                    onPluginClick = { plugin -> onNavigateToDetail(plugin.manifest.id) },
+                    onTogglePlugin = { plugin, enabled ->
+                        viewModel.togglePlugin(plugin.manifest.id, enabled)
+                    },
+                    onDeletePlugin = { plugin -> viewModel.deletePlugin(plugin.manifest.id) },
+                    onImportPlugin = { filePickerLauncher.launch("application/zip") }
+                )
             }
 
             AnimatedVisibility(
@@ -221,115 +210,201 @@ fun PluginManagePage(
             }
         }
     }
-}
 
-/**
- * 检查是否具有所有文件访问权限
- * Android 11 以下无需此特殊权限，直接视为已授权
- */
-private fun checkStoragePermission(): Boolean {
-    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
-        Environment.isExternalStorageManager()
-    } else {
-        true
+    if (showCreateFolderDialog) {
+        CreateFolderDialog(
+            onDismiss = { showCreateFolderDialog = false },
+            onConfirm = { name ->
+                viewModel.createFolder(name)
+                showCreateFolderDialog = false
+            }
+        )
+    }
+
+    showRenameFolderDialog?.let { folder ->
+        RenameFolderDialog(
+            folder = folder,
+            onDismiss = { showRenameFolderDialog = null },
+            onConfirm = { newName ->
+                viewModel.renameFolder(folder.id, newName)
+                showRenameFolderDialog = null
+            },
+            onDelete = {
+                showRenameFolderDialog = null
+                showDeleteFolderConfirm = folder
+            }
+        )
+    }
+
+    showDeleteFolderConfirm?.let { folder ->
+        val count = plugins.count { it.folderId == folder.id }
+        AlertDialog(
+            onDismissRequest = { showDeleteFolderConfirm = null },
+            title = { Text("删除文件夹") },
+            text = {
+                Text(
+                    if (count > 0) {
+                        "确定要删除文件夹「${folder.name}」吗？该文件夹下有 $count 个插件，将自动移到未分组。"
+                    } else {
+                        "确定要删除空文件夹「${folder.name}」吗？"
+                    }
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteFolder(folder.id)
+                    showDeleteFolderConfirm = null
+                }) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteFolderConfirm = null }) { Text("取消") }
+            }
+        )
     }
 }
 
-/**
- * 跳转到系统存储权限设置页
- * 先尝试带包名精准跳转，失败时降级到通用设置页
- */
-private fun openStoragePermissionSettings(context: android.content.Context) {
-    try {
-        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
-            data = Uri.fromParts("package", context.packageName, null)
-        }
-        context.startActivity(intent)
-    } catch (e: Exception) {
-        Log.e(TAG, "openStoragePermissionSettings: precise intent failed, pkg=${context.packageName}", e)
-        try {
-            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
-        } catch (ex: Exception) {
-            Log.e(TAG, "openStoragePermissionSettings: fallback intent also failed", ex)
-        }
-    }
-}
-
-/**
- * 存储权限强制引导页
- * 未授权时全屏显示，完全屏蔽插件列表内容
- */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun StoragePermissionGate(onGrantClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(horizontal = 48.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
+private fun PluginFolderContent(
+    folders: List<PluginFolder>,
+    plugins: List<PluginInfo>,
+    onFolderClick: (PluginFolder) -> Unit,
+    onFolderLongClick: (PluginFolder) -> Unit,
+    onPluginClick: (PluginInfo) -> Unit,
+    onTogglePlugin: (PluginInfo, Boolean) -> Unit,
+    onDeletePlugin: (PluginInfo) -> Unit,
+    onImportPlugin: () -> Unit
+) {
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(
+            start = 16.dp, end = 16.dp, top = 16.dp, bottom = 88.dp
+        ),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            text = "需要存储权限加载插件",
-            style = MaterialTheme.typography.titleMedium,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "插件存放在外部存储目录，需要授予「所有文件访问权限」才能加载和管理插件",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            textAlign = TextAlign.Center
-        )
-        Spacer(modifier = Modifier.height(24.dp))
-        Button(onClick = onGrantClick) {
-            Text("授予权限")
+        if (folders.isNotEmpty()) {
+            item {
+                Text(
+                    text = "文件夹",
+                    style = MaterialTheme.typography.titleMedium,
+                    modifier = Modifier.padding(bottom = 4.dp)
+                )
+            }
+            items(items = folders, key = { it.id }) { folder ->
+                val count = plugins.count { it.folderId == folder.id }
+                FolderCard(
+                    folder = folder,
+                    pluginCount = count,
+                    onClick = { onFolderClick(folder) },
+                    onLongClick = { onFolderLongClick(folder) }
+                )
+            }
         }
-    }
-}
 
-@Composable
-private fun EmptyPluginState(onImportClick: () -> Unit) {
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(32.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.Center
-    ) {
-        Text(text = "暂无插件", style = MaterialTheme.typography.headlineSmall)
-        Spacer(modifier = Modifier.height(8.dp))
-        Text(
-            text = "点击右下角按钮导入插件，或手动将插件文件夹放入插件目录",
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
-        Spacer(modifier = Modifier.height(16.dp))
-        TextButton(onClick = onImportClick) { Text("导入插件") }
-    }
-}
+        val ungroupedPlugins = plugins.filter { it.folderId == null }
+        if (ungroupedPlugins.isNotEmpty() || folders.isEmpty()) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        text = "未分组插件",
+                        style = MaterialTheme.typography.titleMedium,
+                        modifier = Modifier.padding(vertical = 4.dp)
+                    )
+                    if (folders.isEmpty() && ungroupedPlugins.isEmpty()) {
+                        Text(
+                            text = "点击右下角创建文件夹",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
 
-@Composable
-private fun PluginDirectoryInfo(directory: String) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        )
-    ) {
-        Column(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
-            Text(text = "插件目录", style = MaterialTheme.typography.titleSmall)
-            Text(
-                text = directory,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+        if (ungroupedPlugins.isEmpty() && folders.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(24.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Text("暂无未分组插件")
+                    }
+                }
+            }
+        }
+
+        items(items = ungroupedPlugins, key = { it.manifest.id }) { plugin ->
+            PluginCard(
+                plugin = plugin,
+                onClick = { onPluginClick(plugin) },
+                onToggle = { enabled -> onTogglePlugin(plugin, enabled) },
+                onDelete = { onDeletePlugin(plugin) }
             )
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun PluginCard(
+private fun FolderCard(
+    folder: PluginFolder,
+    pluginCount: Int,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onClick,
+                onLongClick = onLongClick
+            )
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Icon(
+                imageVector = HugeIcons.Folder01,
+                contentDescription = null,
+                modifier = Modifier
+                    .size(40.dp)
+                    .padding(end = 16.dp),
+                tint = MaterialTheme.colorScheme.primary
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = folder.name,
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Text(
+                    text = "$pluginCount 个插件",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        }
+    }
+}
+
+@Composable
+internal fun PluginCard(
     plugin: PluginInfo,
     onClick: () -> Unit,
     onToggle: (Boolean) -> Unit,
@@ -398,5 +473,125 @@ private fun PluginCard(
                 TextButton(onClick = { showDeleteConfirm = false }) { Text("取消") }
             }
         )
+    }
+}
+
+@Composable
+private fun CreateFolderDialog(
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit
+) {
+    var folderName by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("新建文件夹") },
+        text = {
+            OutlinedTextField(
+                value = folderName,
+                onValueChange = { folderName = it },
+                label = { Text("文件夹名称") },
+                placeholder = { Text("输入文件夹名称") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(folderName) },
+                enabled = folderName.isNotBlank()
+            ) { Text("创建") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消") }
+        }
+    )
+}
+
+@Composable
+private fun RenameFolderDialog(
+    folder: PluginFolder,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+    onDelete: () -> Unit
+) {
+    var folderName by remember(folder.id) { mutableStateOf(folder.name) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("编辑文件夹") },
+        text = {
+            OutlinedTextField(
+                value = folderName,
+                onValueChange = { folderName = it },
+                label = { Text("文件夹名称") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { onConfirm(folderName) },
+                enabled = folderName.isNotBlank() && folderName != folder.name
+            ) { Text("保存") }
+        },
+        dismissButton = {
+            Row {
+                TextButton(onClick = onDelete) {
+                    Text("删除", color = MaterialTheme.colorScheme.error)
+                }
+                TextButton(onClick = onDismiss) { Text("取消") }
+            }
+        }
+    )
+}
+
+private fun checkStoragePermission(): Boolean {
+    return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+        Environment.isExternalStorageManager()
+    } else {
+        true
+    }
+}
+
+private fun openStoragePermissionSettings(context: android.content.Context) {
+    try {
+        val intent = Intent(Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION).apply {
+            data = Uri.fromParts("package", context.packageName, null)
+        }
+        context.startActivity(intent)
+    } catch (e: Exception) {
+        Log.e(TAG, "openStoragePermissionSettings: precise intent failed, pkg=${context.packageName}", e)
+        try {
+            context.startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+        } catch (ex: Exception) {
+            Log.e(TAG, "openStoragePermissionSettings: fallback intent also failed", ex)
+        }
+    }
+}
+
+@Composable
+private fun StoragePermissionGate(onGrantClick: () -> Unit) {
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(horizontal = 48.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
+    ) {
+        Text(
+            text = "需要存储权限加载插件",
+            style = MaterialTheme.typography.titleMedium,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(8.dp))
+        Text(
+            text = "插件存放在外部存储目录，需要授予「所有文件访问权限」才能加载和管理插件",
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            textAlign = TextAlign.Center
+        )
+        Spacer(modifier = Modifier.height(24.dp))
+        Button(onClick = onGrantClick) {
+            Text("授予权限")
+        }
     }
 }

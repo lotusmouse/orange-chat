@@ -14,6 +14,7 @@ import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
 import me.rerere.rikkahub.data.service.DailySummaryService
 import me.rerere.rikkahub.plugin.loader.PluginLoader
+import me.rerere.rikkahub.plugin.model.PluginFolder
 import me.rerere.rikkahub.plugin.model.PluginInfo
 import me.rerere.rikkahub.plugin.repository.PluginRepository
 import me.rerere.rikkahub.plugin.scanner.PluginScanner
@@ -39,6 +40,9 @@ class PluginManager(
  
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
+
+    private val _folders = MutableStateFlow<List<PluginFolder>>(emptyList())
+    val folders: StateFlow<List<PluginFolder>> = _folders.asStateFlow()
 
     /**
      * 用于跟踪首次初始化是否完成
@@ -68,10 +72,12 @@ class PluginManager(
         _isLoading.value = true
         try {
             val scannedPlugins = scanner.scanPlugins()
+            val assignments = repository.getFolderAssignments()
             val pluginsWithConfig = scannedPlugins.map { plugin ->
                 val savedConfig = repository.getPluginConfig(plugin.manifest.id)
                 val isEnabled = repository.isPluginEnabled(plugin.manifest.id)
-                plugin.copy(config = savedConfig, isEnabled = isEnabled)
+                val folderId = assignments[plugin.manifest.id]
+                plugin.copy(config = savedConfig, isEnabled = isEnabled, folderId = folderId)
             }
             _plugins.value = pluginsWithConfig
             pluginsWithConfig.filter { it.isEnabled }.forEach { plugin ->
@@ -85,6 +91,10 @@ class PluginManager(
         }
     }
  
+    private suspend fun refreshFolders() {
+        _folders.value = repository.getFolders().sortedBy { it.sortOrder }
+    }
+
     private suspend fun loadPlugin(plugin: PluginInfo) {
         loader.loadPlugin(plugin).fold(
             onSuccess = {
@@ -125,6 +135,7 @@ class PluginManager(
             loader.unloadPlugin(pluginId)
             val deleted = scanner.deletePlugin(pluginId)
             repository.removePlugin(pluginId)
+            repository.setPluginFolder(pluginId, null)
             refreshPlugins()
             deleted
         } catch (e: Exception) {
@@ -178,6 +189,52 @@ class PluginManager(
         return loader.callTool(pluginId, toolName, params)
     }
  
+    suspend fun importPlugin(uri: Uri, folderId: String?): Result<PluginInfo> {
+        return try {
+            val result = scanner.importFromZip(uri)
+            result.fold(
+                onSuccess = { pluginInfo ->
+                    repository.savePlugin(pluginInfo)
+                    if (folderId != null) {
+                        repository.setPluginFolder(pluginInfo.manifest.id, folderId)
+                    }
+                    loadPlugin(pluginInfo)
+                    refreshPlugins()
+                    Result.success(pluginInfo)
+                },
+                onFailure = { error -> Result.failure(error) }
+            )
+        } catch (e: Exception) {
+            Result.failure(e)
+        }
+    }
+
+    suspend fun createFolder(name: String): PluginFolder {
+        val folder = repository.addFolder(name)
+        refreshFolders()
+        return folder
+    }
+
+    suspend fun renameFolder(folderId: String, newName: String) {
+        repository.renameFolder(folderId, newName)
+        refreshFolders()
+    }
+
+    suspend fun deleteFolder(folderId: String) {
+        repository.deleteFolder(folderId)
+        refreshFolders()
+        refreshPlugins()
+    }
+
+    suspend fun movePluginToFolder(pluginId: String, folderId: String?) {
+        repository.setPluginFolder(pluginId, folderId)
+        updatePluginState(pluginId) { it.copy(folderId = folderId) }
+    }
+
+    fun getPluginsByFolder(folderId: String?): List<PluginInfo> {
+        return _plugins.value.filter { it.folderId == folderId }
+    }
+
     private fun updatePluginState(pluginId: String, transform: (PluginInfo) -> PluginInfo) {
         _plugins.value = _plugins.value.map { plugin ->
             if (plugin.manifest.id == pluginId) transform(plugin) else plugin
