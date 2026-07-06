@@ -152,10 +152,21 @@ class ExternalMemoryService(
         assistantId: String,
         content: String,
         embedding: List<Float>? = null,
+        /**
+         * 这篇日记对应的日期（"yyyy-MM-dd"）。
+         * 会作为 created_at 写入（设为该日 00:00:00），这样去重查询 querySummariesByDate
+         * 才能按"日记对应日"命中，而不是按写入时刻（可能落在次日）导致每次都重复生成。
+         * 为空时退回旧逻辑（用当前写入时刻）。
+         */
+        targetDate: String? = null,
     ): Result<Unit> = withContext(Dispatchers.IO) {
         runCatching {
             val sdf = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.getDefault())
-            val createdAt = sdf.format(java.util.Date())
+            val createdAt = if (!targetDate.isNullOrBlank()) {
+                "$targetDate 00:00:00"
+            } else {
+                sdf.format(java.util.Date())
+            }
 
             // 首次尝试：若提供了 embedding，则带上 embedding 字段
             val firstJson = buildSummaryJson(assistantId, content, createdAt, embedding)

@@ -53,6 +53,7 @@ class PluginManager(
     init {
         CoroutineScope(Dispatchers.IO).launch {
             try {
+                refreshFolders()
                 refreshPlugins()
             } finally {
                 initializationDeferred.complete(Unit)

@@ -447,6 +447,7 @@ class DiarySummaryService {
                                         assistantId = assistantId,
                                         content = summaryText,
                                         embedding = embedding,
+                                        targetDate = dateStr,
                                     )
                                     if (saveResult.isSuccess) {
                                         Log.i(TAG, "Diary saved to external memory ${config.name} for $dateStr assistant=$assistantId")

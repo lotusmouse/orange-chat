@@ -71,12 +71,8 @@ fun createExploreNearbyTool(context: Context, settings: Settings): Tool = Tool(
             val type = params["type"]?.jsonPrimitive?.content ?: ""
             val limit = params["limit"]?.jsonPrimitive?.intOrNull ?: 10
 
-            // Get current location
-            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-            val loc = lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+            // Get current location (缓存过期时会主动请求新定位)
+            val loc = LocationHelper.getCurrentLocation(context)
 
             if (loc == null) {
                 return@Tool listOf(UIMessagePart.Text(

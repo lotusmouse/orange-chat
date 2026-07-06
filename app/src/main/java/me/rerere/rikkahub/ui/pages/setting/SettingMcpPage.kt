@@ -19,6 +19,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.FlowRowOverflow
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.material3.Button
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -74,6 +75,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.drawWithContent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -294,6 +296,10 @@ private fun McpServerItem(
                         modifier = Modifier.size(24.dp)
                     )
                     is McpStatus.Error -> Icon(HugeIcons.AlertCircle, null)
+                    McpStatus.NeedsAuthorization -> Icon(HugeIcons.AlertCircle, null)
+                    McpStatus.Authorizing -> CircularProgressIndicator(
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
                 Column(
@@ -329,6 +335,32 @@ private fun McpServerItem(
                                 is McpServerConfig.SseTransportServer -> Text("SSE")
                                 is McpServerConfig.StreamableHTTPServer -> Text("Streamable HTTP")
                             }
+                        }
+                    }
+                    if (status == McpStatus.NeedsAuthorization) {
+                        val context = LocalContext.current
+                        Text(
+                            text = "需要 OAuth 授权",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                        Button(
+                            onClick = { mcpManager.startAuthorization(item, context) },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        ) {
+                            Text("OAuth 授权")
+                        }
+                    }
+                    if (status == McpStatus.Authorizing) {
+                        Text(
+                            text = "正在授权，请在浏览器中完成…",
+                            style = MaterialTheme.typography.labelSmall,
+                        )
+                        TextButton(
+                            onClick = { mcpManager.cancelAuthorization(item) },
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                        ) {
+                            Text("取消授权")
                         }
                     }
                 }

@@ -1,6 +1,5 @@
 package me.rerere.rikkahub.ui.pages.voice
 
-import android.os.Build
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
@@ -12,7 +11,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.blur
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -103,33 +101,21 @@ fun VoiceOrb(
         VoiceCallStatus.Idle -> 0.08f
     }
 
-    val scale = breathe + intensity * 0.35f
+    val scale = breathe + intensity * 0.3f
 
-    val blurAmount = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        (8 + intensity * 12).dp
-    } else {
-        0.dp
-    }
-
+    // 不再用 Modifier.blur 把整个 Canvas 糊掉 —— 那是球发虚难看的元凶.
+    // 发光感由外层多层半透明圆自然实现, 球体本体保持清晰锐利.
     Canvas(
-        modifier = modifier
-            .size(size)
-            .then(
-                if (blurAmount > 0.dp && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-                    Modifier.blur(blurAmount)
-                } else {
-                    Modifier
-                }
-            )
+        modifier = modifier.size(size)
     ) {
         val canvasSize = this.size.minDimension
         val center = Offset(canvasSize / 2, canvasSize / 2)
         val baseRadius = canvasSize / 2 * 0.65f
 
-        // 外层光晕 (多层半透明圆, 制造发光感)
-        for (i in 4 downTo 1) {
-            val layerRadius = baseRadius * scale * (1f + i * 0.18f)
-            val alpha = (0.06f / i) * (1f + intensity)
+        // 外层光晕 (多层半透明圆, 制造发光感, 替代原来的整体 blur)
+        for (i in 5 downTo 1) {
+            val layerRadius = baseRadius * scale * (1f + i * 0.22f)
+            val alpha = (0.05f / i) * (1f + intensity)
             drawCircle(
                 color = baseColor.copy(alpha = alpha.coerceAtMost(0.25f)),
                 radius = layerRadius,

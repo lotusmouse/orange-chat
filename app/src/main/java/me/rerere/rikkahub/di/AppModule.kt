@@ -98,6 +98,7 @@ val appModule = module {
             pluginLoader = get(),
             workspaceRepository = get(),
             memoryBankService = get(),
+            folderRepository = get(),
         )
     }
 

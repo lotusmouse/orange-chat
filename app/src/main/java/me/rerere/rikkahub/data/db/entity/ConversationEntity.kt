@@ -24,4 +24,6 @@ data class ConversationEntity(
     val isPinned: Boolean,
     @ColumnInfo("custom_system_prompt", defaultValue = "")
     val customSystemPrompt: String = "",
+    @ColumnInfo("folder_id", defaultValue = "")
+    val folderId: String = "",
 )

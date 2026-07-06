@@ -7,6 +7,8 @@ import android.content.ServiceConnection
 import android.os.IBinder
 import android.util.Log
 import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,10 +16,12 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -32,9 +36,12 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -52,10 +59,32 @@ import kotlin.uuid.Uuid
 
 private const val TAG = "VoiceCallPage"
 
+// 暖色色板 (用户指定, 原值不动) - 不同状态对应不同主色
+private val ColorIdle = Color(0xFF9D9A55)   // 暗卡其 - 准备就绪
+private val ColorListening = Color(0xFFC6BD56) // 金黄 - 聆听
+private val ColorProcessing = Color(0xFFFDAE4F) // 琥珀 - 思考
+private val ColorSpeaking = Color(0xFFF58232)   // 橙 - 传达
+
+// 暖色深底 (提亮一档, 不再死黑, 让暖色光晕透得出来)
+private val ColorBgWarm = Color(0xFF241A0B)
+
+/**
+ * 状态 -> 主色
+ */
+private fun statusAccentColor(status: VoiceCallStatus): Color = when (status) {
+    VoiceCallStatus.Idle -> ColorIdle
+    VoiceCallStatus.Listening -> ColorListening
+    VoiceCallStatus.Processing -> ColorProcessing
+    VoiceCallStatus.Speaking -> ColorSpeaking
+    VoiceCallStatus.Error -> Color(0xFFE5484D)
+}
+
 /**
  * 语音通话页面 (ChatGPT 独立语音模式风格)
  *
- * - 纯色深色背景 + 流动光球
+ * - 暖色深色背景 + 随状态微妙变色的径向光晕
+ * - 流动光球 (颜色随状态变化)
+ * - 多行流式字幕 (聆听/思考显示, 传达/就绪隐藏)
  * - 底部只有两个按钮: 静音 / 挂断
  * - 返回键 = 切后台继续通话 (不挂断)
  * - 业务逻辑全部跑在 VoiceCallService 里, 页面只负责 bind + 显示 uiState
@@ -131,69 +160,107 @@ fun VoiceCallPage(
         onBack()
     }
 
-    // 纯色深色背景, 不随状态大幅变换色相
-    val backgroundColor = Color(0xFF0A0A0F)
+    // 随状态平滑过渡的主色 (光球 / 标签 / 背景光晕共用)
+    val accentColor by animateColorAsState(
+        targetValue = statusAccentColor(uiState.status),
+        animationSpec = tween(durationMillis = 800),
+        label = "accentColor"
+    )
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(backgroundColor)
+            .background(ColorBgWarm)
+            // 叠加一层跟随状态的径向暖色光晕, 整屏融入当前状态色
+            // (透明度调高, 让背景真的透出暖色, 而不是死黑一片)
+            .drawBehind {
+                drawRect(
+                    brush = Brush.radialGradient(
+                        colors = listOf(
+                            accentColor.copy(alpha = 0.45f),
+                            accentColor.copy(alpha = 0.18f),
+                            accentColor.copy(alpha = 0.03f),
+                            Color.Transparent
+                        ),
+                        center = androidx.compose.ui.geometry.Offset(
+                            size.width / 2f,
+                            size.height * 0.4f
+                        ),
+                        radius = size.maxDimension * 0.75f
+                    )
+                )
+            }
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 顶部: 只有一行很淡的小字提示当前状态
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // 顶部: 状态标签 (用当前状态主色, 与光球/背景同色系)
+            Text(
+                text = statusText(uiState.status),
+                color = accentColor,
+                fontSize = 16.sp,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier.padding(top = 80.dp)
-            ) {
-                Text(
-                    text = statusText(uiState.status),
-                    color = Color.White.copy(alpha = 0.6f),
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Light
-                )
-            }
+            )
 
-            // 中部: 流动光球 (不显示对话文字)
+            // 中部: 流动光球 (颜色随状态变化)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
-                Spacer(modifier = Modifier.height(40.dp))
+                Spacer(modifier = Modifier.size(40.dp))
 
                 VoiceOrb(
                     amplitudes = uiState.amplitudes,
                     status = uiState.status,
-                    size = 240.dp
+                    baseColor = accentColor,
+                    size = 200.dp
                 )
 
                 // 绑定还没完成时, 显示一个小的加载指示器
                 if (boundService == null) {
-                    Spacer(modifier = Modifier.height(24.dp))
+                    Spacer(modifier = Modifier.size(24.dp))
                     CircularProgressIndicator(
                         color = Color.White.copy(alpha = 0.5f),
                         strokeWidth = 2.dp,
                         modifier = Modifier.size(24.dp)
                     )
                 }
+            }
 
-                // 错误信息 (保留, 方便调试)
-                uiState.errorMessage?.let { error ->
-                    Spacer(modifier = Modifier.height(16.dp))
-                    Text(
-                        text = error,
-                        color = MaterialTheme.colorScheme.error,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    )
-                }
+            // 字幕区: 按状态切换显示谁的字幕
+            // - 聆听/思考: 显示用户刚说的话 (思考时保留, 让用户确认 AI 听到了什么)
+            // - 传达/就绪: 显示 AI 的话 (传达时逐句增长, 说完后仍保留在屏上,
+            //   直到下一轮用户开始说话、Service 清掉 assistantText 才换掉)
+            val subtitleText = when (uiState.status) {
+                VoiceCallStatus.Listening,
+                VoiceCallStatus.Processing -> uiState.userTranscript
+                VoiceCallStatus.Speaking,
+                VoiceCallStatus.Idle -> uiState.assistantText
+                VoiceCallStatus.Error -> ""
+            }
+            if (subtitleText.isNotBlank()) {
+                StreamingSubtitle(
+                    text = subtitleText,
+                    accentColor = accentColor
+                )
+            }
+
+            // 错误信息 (保留, 方便调试)
+            uiState.errorMessage?.let { error ->
+                Text(
+                    text = error,
+                    color = MaterialTheme.colorScheme.error,
+                    fontSize = 12.sp,
+                    textAlign = TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 32.dp)
+                )
             }
 
             // 底部: 只有两个按钮 (ChatGPT 风格)
-            // 左: 静音, 右: 挂断. 删除中间状态切换按钮和自动发送开关.
+            // 左: 静音, 右: 挂断.
             Row(
                 horizontalArrangement = Arrangement.spacedBy(56.dp),
                 verticalAlignment = Alignment.CenterVertically,
@@ -234,6 +301,44 @@ fun VoiceCallPage(
 }
 
 /**
+ * 多行流式字幕
+ *
+ * - 自动换行, 超出容器高度向上滚动, 始终显示最新文字
+ * - Listening/Processing 状态使用; Speaking/Idle 由上层隐藏
+ */
+@Composable
+private fun StreamingSubtitle(
+    text: String,
+    accentColor: Color,
+    modifier: Modifier = Modifier,
+) {
+    val scrollState = rememberScrollState()
+    // 文本增长时滚到最底部, 让最新内容始终可见
+    LaunchedEffect(text) {
+        if (text.isNotEmpty()) {
+            scrollState.animateScrollTo(scrollState.maxValue)
+        }
+    }
+
+    Column(
+        modifier = modifier
+            .padding(horizontal = 36.dp, vertical = 16.dp)
+            .heightIn(max = 140.dp)
+            .verticalScroll(scrollState),
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(
+            text = text.ifBlank { " " },
+            color = Color.White.copy(alpha = 0.92f),
+            fontSize = 16.sp,
+            lineHeight = 24.sp,
+            fontWeight = FontWeight.Normal,
+            textAlign = TextAlign.Center
+        )
+    }
+}
+
+/**
  * 控制按钮 (圆形)
  */
 @Composable
@@ -269,8 +374,8 @@ private fun ControlButton(
 
 private fun statusText(status: VoiceCallStatus): String = when (status) {
     VoiceCallStatus.Idle -> "准备就绪"
-    VoiceCallStatus.Listening -> "聆听中"
-    VoiceCallStatus.Processing -> "思考中"
-    VoiceCallStatus.Speaking -> "说话中"
+    VoiceCallStatus.Listening -> "正在聆听"
+    VoiceCallStatus.Processing -> "正在思考"
+    VoiceCallStatus.Speaking -> "正在传达"
     VoiceCallStatus.Error -> "出错了"
 }

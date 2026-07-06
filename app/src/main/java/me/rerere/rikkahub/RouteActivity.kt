@@ -297,6 +297,7 @@ class RouteActivity : ComponentActivity() {
                 when (event) {
                     is AppEvent.Speak -> tts.speak(event.text)
                     is AppEvent.EmojiSelected -> { /* handled in UIAvatar */ }
+                    is AppEvent.McpOAuthCallback -> Unit // 由 McpManager 消费
                 }
             }
         }

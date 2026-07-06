@@ -1057,4 +1057,15 @@ mDNSアドレス: .localホスト名を使用し、IPを知らなくても同じ
   <string name="video">動画</string>
   <string name="web_search_disabled">ウェブ検索が無効になりました</string>
   <string name="web_search_enabled">ウェブ検索が有効になりました</string>
+  <string name="chat_page_move_to_folder">フォルダに移動</string>
+  <string name="chat_page_remove_from_folder">フォルダから削除</string>
+  <string name="chat_page_create_folder">新規フォルダ</string>
+  <string name="chat_page_folder_name">フォルダ名</string>
+  <string name="chat_page_rename_folder">フォルダ名を変更</string>
+  <string name="chat_page_delete_folder">フォルダを削除</string>
+  <string name="chat_page_rename">名前を変更</string>
+  <string name="chat_page_folder_default">チャット</string>
+  <string name="chat_page_folder_add">新規</string>
+  <string name="chat_page_delete_folder_confirm">フォルダ "%1$s" を削除しますか？内部の会話は削除されず、フォルダから取り除かれるだけです。</string>
+  <string name="chat_page_delete_folder_generating">フォルダ内の一部の会話がまだ生成中です。削除する前にそれらを停止してください。</string>
 </resources>

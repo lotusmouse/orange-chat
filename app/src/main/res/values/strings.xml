@@ -1108,4 +1108,15 @@
   <string name="keep_alive_channel_desc">用于维持应用后台运行，确保定时消息等功能稳定工作</string>
   <string name="setting_system_tools_keep_alive">后台保活</string>
   <string name="setting_system_tools_keep_alive_desc">开启后前台常驻通知，降低被系统杀死概率，保障定时消息正常触发</string>
+  <string name="chat_page_move_to_folder">Move to Folder</string>
+  <string name="chat_page_remove_from_folder">Remove from Folder</string>
+  <string name="chat_page_create_folder">New Folder</string>
+  <string name="chat_page_folder_name">Folder name</string>
+  <string name="chat_page_rename_folder">Rename Folder</string>
+  <string name="chat_page_delete_folder">Delete Folder</string>
+  <string name="chat_page_rename">Rename</string>
+  <string name="chat_page_folder_default">Chat</string>
+  <string name="chat_page_folder_add">New</string>
+  <string name="chat_page_delete_folder_confirm">Delete folder "%1$s"? Conversations inside will not be deleted, only removed from the folder.</string>
+  <string name="chat_page_delete_folder_generating">Some conversations in this folder are still generating. Please stop them before deleting.</string>
 </resources>

@@ -1057,4 +1057,15 @@
   <string name="video">Видео</string>
   <string name="web_search_disabled">Веб-поиск отключён</string>
   <string name="web_search_enabled">Веб-поиск включён</string>
+  <string name="chat_page_move_to_folder">Переместить в папку</string>
+  <string name="chat_page_remove_from_folder">Убрать из папки</string>
+  <string name="chat_page_create_folder">Новая папка</string>
+  <string name="chat_page_folder_name">Имя папки</string>
+  <string name="chat_page_rename_folder">Переименовать папку</string>
+  <string name="chat_page_delete_folder">Удалить папку</string>
+  <string name="chat_page_rename">Переименовать</string>
+  <string name="chat_page_folder_default">Чат</string>
+  <string name="chat_page_folder_add">Новая</string>
+  <string name="chat_page_delete_folder_confirm">Удалить папку "%1$s"? Беседы внутри не будут удалены, только исключены из папки.</string>
+  <string name="chat_page_delete_folder_generating">Некоторые беседы в этой папке все еще генерируются. Пожалуйста, остановите их перед удалением.</string>
 </resources>

@@ -6,7 +6,6 @@ import android.content.pm.PackageManager
 import android.location.Geocoder
 import android.location.LocationManager
 import androidx.core.content.ContextCompat
-import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
@@ -77,11 +76,7 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                     ))
                 }
                 try {
-                    val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
-                    val loc = lm.getLastKnownLocation(LocationManager.FUSED_PROVIDER)
-                        ?: lm.getLastKnownLocation(LocationManager.GPS_PROVIDER)
-                        ?: lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER)
-                        ?: lm.getLastKnownLocation(LocationManager.PASSIVE_PROVIDER)
+                    val loc = LocationHelper.getCurrentLocation(context)
 
                     if (loc == null) {
                         return@Tool listOf(UIMessagePart.Text(
@@ -104,7 +99,7 @@ class SystemTools(private val context: Context, private val settings: Settings) 
                         if (apiKey.isNotBlank()) {
                             try {
                                 val amapService = AmapService(apiKey)
-                                val addressResult = runBlocking { amapService.getAddressFromGps(loc.latitude, loc.longitude) }
+                                val addressResult = amapService.getAddressFromGps(loc.latitude, loc.longitude)
                                 if (addressResult.success) {
                                     addressResolved = true
                                     put("address", addressResult.formattedAddress ?: "")

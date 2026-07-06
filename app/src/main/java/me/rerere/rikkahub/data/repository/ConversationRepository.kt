@@ -75,6 +75,32 @@ class ConversationRepository(
         }
     }
 
+    fun getUnfiledConversationsOfAssistantPaging(assistantId: Uuid): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.getUnfiledConversationsOfAssistantPaging(assistantId.toString()) }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationSummaryToConversation(entity)
+        }
+    }
+
+    fun getConversationsOfFolderPaging(folderId: Uuid): Flow<PagingData<Conversation>> = Pager(
+        config = PagingConfig(
+            pageSize = PAGE_SIZE,
+            initialLoadSize = INITIAL_LOAD_SIZE,
+            enablePlaceholders = false
+        ),
+        pagingSourceFactory = { conversationDAO.getConversationsOfFolderPaging(folderId.toString()) }
+    ).flow.map { pagingData ->
+        pagingData.map { entity ->
+            conversationSummaryToConversation(entity)
+        }
+    }
+
     suspend fun getConversationsOfAssistantPage(
         assistantId: Uuid,
         offset: Int,
@@ -277,6 +303,7 @@ class ConversationRepository(
             chatSuggestions = JsonInstant.encodeToString(conversation.chatSuggestions),
             isPinned = conversation.isPinned,
             customSystemPrompt = conversation.customSystemPrompt ?: "",
+            folderId = conversation.folderId?.toString() ?: "",
         )
     }
 
@@ -294,6 +321,7 @@ class ConversationRepository(
             chatSuggestions = JsonInstant.decodeFromString(conversationEntity.chatSuggestions),
             isPinned = conversationEntity.isPinned,
             customSystemPrompt = conversationEntity.customSystemPrompt.ifEmpty { null },
+            folderId = conversationEntity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
         )
     }
 
@@ -314,6 +342,16 @@ class ConversationRepository(
         )
     }
 
+    /**
+     * 单列更新会话的文件夹归属，folderId 为 null 表示移出文件夹（未归类）。
+     */
+    suspend fun updateConversationFolderId(conversationId: Uuid, folderId: Uuid?) {
+        conversationDAO.updateFolderId(
+            id = conversationId.toString(),
+            folderId = folderId?.toString() ?: ""
+        )
+    }
+
     private fun conversationSummaryToConversation(entity: LightConversationEntity): Conversation {
         return Conversation(
             id = Uuid.parse(entity.id),
@@ -323,6 +361,7 @@ class ConversationRepository(
             createAt = Instant.ofEpochMilli(entity.createAt),
             updateAt = Instant.ofEpochMilli(entity.updateAt),
             messageNodes = emptyList(),
+            folderId = entity.folderId.ifEmpty { null }?.let { Uuid.parse(it) },
         )
     }
 
@@ -444,6 +483,7 @@ data class LightConversationEntity(
     val isPinned: Boolean,
     val createAt: Long,
     val updateAt: Long,
+    val folderId: String = "",
 )
 
 data class ConversationPageResult(
