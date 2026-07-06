@@ -259,14 +259,26 @@ class VolcengineASRController(
             )
             val chunkSize = (SAMPLE_RATE * 2 * 200 / 1000).coerceAtLeast(minBufferSize)
 
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                SAMPLE_RATE,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                chunkSize * 2
-            )
-            audioRecord = recorder
+            val recorder: AudioRecord
+            try {
+                recorder = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                    SAMPLE_RATE,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    chunkSize * 2
+                )
+                audioRecord = recorder
+                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                    throw IllegalStateException(
+                        "AudioRecord 初始化失败, state=${recorder.state}, 请检查录音权限或音频参数"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "AudioRecord 构造/初始化失败", e)
+                setError(e.message ?: "麦克风初始化失败")
+                return@launch
+            }
 
             try {
                 recorder.startRecording()

@@ -60,6 +60,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -107,6 +108,7 @@ import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Assistant
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.data.model.QuickMessage
+import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.KeepScreenOn
 import me.rerere.rikkahub.ui.components.ui.toComposeColor
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
@@ -187,6 +189,8 @@ fun ChatInput(
     val filesManager: FilesManager = koinInject()
     val asr = LocalASRState.current
     val asrState by asr.state.collectAsState()
+    val voiceCallActiveId by VoiceCallService.activeConversationId.collectAsStateWithLifecycle()
+    val isVoiceCallActive = voiceCallActiveId != null
     val hapticFeedback = LocalHapticFeedback.current
     val soundEffectPlayer: SoundEffectPlayer = koinInject()
     LaunchedEffect(Unit) {
@@ -602,7 +606,8 @@ fun ChatInput(
                             }
 
                             // Voice button: click to record, click again to stop and send
-                            if (asrState.isAvailable || asrState.isRecording) {
+                            // 通话进行中禁用, 避免两路麦克风冲突
+                            if ((asrState.isAvailable || asrState.isRecording) && !isVoiceCallActive) {
                                 ActionIconButton(
                                     onClick = {
                                         when (asrState.status) {

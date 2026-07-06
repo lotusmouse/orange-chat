@@ -265,6 +265,20 @@ class RouteActivity : ComponentActivity() {
                 }
             }
         }
+
+        // 新增逻辑: 从语音通话通知点击, 回到通话页面
+        intent.getStringExtra("openVoiceCallConversationId")?.let { convId ->
+            navStack?.let { stack ->
+                Snapshot.withMutableSnapshot {
+                    val alreadyOnVoiceCall = stack.lastOrNull().let {
+                        it is Screen.VoiceCall && it.conversationId == convId
+                    }
+                    if (!alreadyOnVoiceCall) {
+                        stack.add(Screen.VoiceCall(convId))
+                    }
+                }
+            }
+        }
     }
 
     override fun onDestroy() {

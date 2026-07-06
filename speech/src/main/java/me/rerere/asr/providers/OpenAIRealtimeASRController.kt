@@ -153,14 +153,26 @@ class OpenAIRealtimeASRController(
                 .coerceAtLeast(provider.sampleRate / 10 * 2)
                 .coerceAtLeast(4096)
 
-            val recorder = AudioRecord(
-                MediaRecorder.AudioSource.VOICE_COMMUNICATION,
-                provider.sampleRate,
-                AudioFormat.CHANNEL_IN_MONO,
-                AudioFormat.ENCODING_PCM_16BIT,
-                bufferSize * 2
-            )
-            audioRecord = recorder
+            val recorder: AudioRecord
+            try {
+                recorder = AudioRecord(
+                    MediaRecorder.AudioSource.VOICE_COMMUNICATION,
+                    provider.sampleRate,
+                    AudioFormat.CHANNEL_IN_MONO,
+                    AudioFormat.ENCODING_PCM_16BIT,
+                    bufferSize * 2
+                )
+                audioRecord = recorder
+                if (recorder.state != AudioRecord.STATE_INITIALIZED) {
+                    throw IllegalStateException(
+                        "AudioRecord 初始化失败, state=${recorder.state}, 请检查录音权限或音频参数"
+                    )
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "AudioRecord 构造/初始化失败", e)
+                setError(e.message ?: "麦克风初始化失败")
+                return@launch
+            }
 
             try {
                 recorder.startRecording()

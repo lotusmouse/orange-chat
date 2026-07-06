@@ -9,6 +9,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.getSelectedTTSProvider
 import me.rerere.rikkahub.utils.stripMarkdown
@@ -53,6 +54,26 @@ fun rememberCustomTtsState(): CustomTtsState {
     return ttsState
 }
 
+/**
+ * 非 Compose 版本的工厂函数，供 Service 等非 UI 场景创建独立的 TTS 实例。
+ *
+ * suspend 函数，会真正挂起等待 provider 设置完成后才返回实例，
+ * 消除之前 launch{} "发射后不管" 导致的 controller 为 null 竞态。
+ */
+suspend fun createCustomTtsState(
+    context: Context,
+    settingsStore: SettingsStore,
+): CustomTtsState {
+    val ttsState = CustomTtsStateImpl(context.applicationContext, settingsStore)
+    try {
+        val settings = settingsStore.settingsFlow.first()
+        ttsState.updateProvider(settings.getSelectedTTSProvider())
+    } catch (e: Exception) {
+        Log.e("CreateCustomTtsState", "初始化 TTS provider 失败", e)
+    }
+    return ttsState
+}
+
 interface CustomTtsState {
     val isAvailable: StateFlow<Boolean>
     val isSpeaking: StateFlow<Boolean>
@@ -79,7 +100,7 @@ interface CustomTtsState {
     fun enqueueText(text: String)
 }
 
-private class CustomTtsStateImpl(
+internal class CustomTtsStateImpl(
     private val context: Context,
     private val settingsStore: SettingsStore
 ) : CustomTtsState, KoinComponent {

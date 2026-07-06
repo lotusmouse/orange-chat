@@ -53,6 +53,7 @@ const val WEB_SERVER_NOTIFICATION_CHANNEL_ID = "web_server"
 const val POMODORO_NOTIFICATION_CHANNEL_ID = "pomodoro_timer"
 const val MUSIC_PLAYER_NOTIFICATION_CHANNEL_ID = "music_player"
 const val DEVICE_EVENT_NOTIFICATION_CHANNEL_ID = "device_event_tracking"
+const val VOICE_CALL_NOTIFICATION_CHANNEL_ID = "voice_call"
 
 class RikkaHubApp : Application() {
     companion object {
@@ -278,6 +279,14 @@ class RikkaHubApp : Application() {
             .setShowBadge(false)
             .build()
         notificationManager.createNotificationChannel(deviceEventChannel)
+
+        val voiceCallChannel = NotificationChannelCompat
+            .Builder(VOICE_CALL_NOTIFICATION_CHANNEL_ID, NotificationManagerCompat.IMPORTANCE_LOW)
+            .setName("语音通话")
+            .setVibrationEnabled(false)
+            .setShowBadge(false)
+            .build()
+        notificationManager.createNotificationChannel(voiceCallChannel)
     }
 
     override fun onTerminate() {

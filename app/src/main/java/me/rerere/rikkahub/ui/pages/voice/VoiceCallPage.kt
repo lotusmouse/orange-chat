@@ -1,15 +1,12 @@
 package me.rerere.rikkahub.ui.pages.voice
 
+import android.content.ComponentName
+import android.content.Context
+import android.content.Intent
+import android.content.ServiceConnection
+import android.os.IBinder
+import android.util.Log
 import androidx.activity.compose.BackHandler
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -20,7 +17,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -30,348 +27,214 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.Cancel01
 import me.rerere.hugeicons.stroke.Mic01
 import me.rerere.hugeicons.stroke.MicOff01
-import me.rerere.hugeicons.stroke.Voice
+import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionRecordAudio
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
-import me.rerere.rikkahub.ui.context.LocalASRState
-import me.rerere.rikkahub.ui.context.LocalTTSState
-import org.koin.androidx.compose.koinViewModel
-import org.koin.core.parameter.parametersOf
 import kotlin.uuid.Uuid
 
+private const val TAG = "VoiceCallPage"
+
 /**
- * 语音通话页面
+ * 语音通话页面 (ChatGPT 独立语音模式风格)
  *
- * 类似微信通话 / ChatGPT Voice 的全屏沉浸式语音对话界面.
- * 进入页面后自动开始监听, 实现 ASR -> AI -> TTS 的连续对话循环.
+ * - 纯色深色背景 + 流动光球
+ * - 底部只有两个按钮: 静音 / 挂断
+ * - 返回键 = 切后台继续通话 (不挂断)
+ * - 业务逻辑全部跑在 VoiceCallService 里, 页面只负责 bind + 显示 uiState
  */
 @Composable
 fun VoiceCallPage(
     conversationId: Uuid,
     onBack: () -> Unit,
 ) {
-    val vm: VoiceCallVM = koinViewModel(
-        parameters = { parametersOf(conversationId.toString()) }
-    )
-    val asr = LocalASRState.current
-    val tts = LocalTTSState.current
-    val uiState by vm.uiState.collectAsStateWithLifecycle()
-    val asrState by asr.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    var boundService by remember { mutableStateOf<VoiceCallService?>(null) }
 
     // 录音权限
     val asrPermission = rememberPermissionState(PermissionRecordAudio)
 
-    // 当 ASR 振幅更新时, 同步到 UI
-    LaunchedEffect(asrState.amplitudes) {
-        vm.updateAmplitudes(asrState.amplitudes)
+    val connection = remember {
+        object : ServiceConnection {
+            override fun onServiceConnected(name: ComponentName?, binder: IBinder?) {
+                boundService = (binder as? VoiceCallService.LocalBinder)?.getService()
+            }
+
+            override fun onServiceDisconnected(name: ComponentName?) {
+                boundService = null
+            }
+        }
     }
 
-    // 页面启动: 请求权限并开始通话
+    // bind/unbind Service. 关键: onDispose 只解绑, 绝不调用 endCall/stopService
+    DisposableEffect(conversationId) {
+        // 如果 Service 还没在跑这个对话的通话, 先 start 再 bind
+        // 如果已经在跑 (用户是从通知点回来的), 只 bind, 不重复 start
+        if (VoiceCallService.activeConversationId.value != conversationId.toString()) {
+            // 权限检查: 没权限先请求, 拿到权限后再 start (见下方 LaunchedEffect)
+            if (asrPermission.allRequiredPermissionsGranted) {
+                VoiceCallService.start(context, conversationId.toString())
+            }
+        }
+        val intent = Intent(context, VoiceCallService::class.java)
+        context.bindService(intent, connection, Context.BIND_AUTO_CREATE)
+
+        onDispose {
+            try {
+                context.unbindService(connection)
+            } catch (e: Exception) {
+                Log.e(TAG, "unbindService 失败", e)
+            }
+        }
+    }
+
+    // 权限授予后启动 Service (如果还没启动)
+    LaunchedEffect(asrPermission.allRequiredPermissionsGranted) {
+        if (asrPermission.allRequiredPermissionsGranted &&
+            VoiceCallService.activeConversationId.value == null
+        ) {
+            VoiceCallService.start(context, conversationId.toString())
+        }
+    }
+
+    // 进入页面时, 如果还没权限, 请求权限
     LaunchedEffect(Unit) {
-        if (asrPermission.allRequiredPermissionsGranted) {
-            vm.startCall(asr, tts)
-        } else {
+        if (!asrPermission.allRequiredPermissionsGranted) {
             asrPermission.requestPermissions()
         }
     }
 
-    // 权限授予后自动开始
-    LaunchedEffect(asrPermission.allRequiredPermissionsGranted) {
-        if (asrPermission.allRequiredPermissionsGranted && uiState.status == VoiceCallStatus.Idle) {
-            vm.startCall(asr, tts)
-        }
-    }
+    // boundService 为 null (绑定还没完成) 时, 显示默认空状态
+    val uiState by (boundService?.uiState
+        ?: MutableStateFlow(VoiceCallUiState()).asStateFlow())
+        .collectAsStateWithLifecycle(initialValue = VoiceCallUiState())
 
-    // 处理返回键 = 挂断
+    // 返回键 = 切后台继续通话, 不挂断. 这是这次改动最核心的行为变化.
     BackHandler {
-        vm.endCall(asr, tts)
         onBack()
     }
 
-    // 退出时清理
-    DisposableEffect(Unit) {
-        onDispose {
-            vm.endCall(asr, tts)
-        }
-    }
-
-    // 渐变背景 - 更鲜艳、更有呼吸感
-    val backgroundColor = when (uiState.status) {
-        VoiceCallStatus.Listening -> Color(0xFF2E7D32)
-        VoiceCallStatus.Speaking -> Color(0xFF1565C0)
-        VoiceCallStatus.Processing -> Color(0xFF4527A0)
-        VoiceCallStatus.Error -> Color(0xFFC62828)
-        VoiceCallStatus.Idle -> Color(0xFF0D1117)
-    }
-
-    val statusPulse by rememberInfiniteTransition(label = "pulse").animateFloat(
-        initialValue = 0.7f,
-        targetValue = 1f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(600, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "pulse"
-    )
+    // 纯色深色背景, 不随状态大幅变换色相
+    val backgroundColor = Color(0xFF0A0A0F)
 
     Box(
         modifier = Modifier
             .fillMaxSize()
-            .background(
-                brush = Brush.verticalGradient(
-                    colors = listOf(
-                        backgroundColor,
-                        backgroundColor.copy(alpha = 0.7f),
-                        Color.Black.copy(alpha = 0.9f)
-                    )
-                )
-            )
+            .background(backgroundColor)
     ) {
         Column(
             modifier = Modifier.fillMaxSize(),
             horizontalAlignment = Alignment.CenterHorizontally,
             verticalArrangement = Arrangement.SpaceBetween
         ) {
-            // 顶部: 标题和状态
+            // 顶部: 只有一行很淡的小字提示当前状态
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(top = 60.dp)
+                modifier = Modifier.padding(top = 80.dp)
             ) {
                 Text(
-                    text = "语音通话",
-                    color = Color.White,
-                    fontSize = 20.sp,
+                    text = statusText(uiState.status),
+                    color = Color.White.copy(alpha = 0.6f),
+                    fontSize = 14.sp,
                     fontWeight = FontWeight.Light
                 )
-                Spacer(modifier = Modifier.height(8.dp))
-                // 状态指示器 - 带脉冲动画
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    // 状态脉冲点
-                    val dotColor = when (uiState.status) {
-                        VoiceCallStatus.Listening -> Color(0xFF69F0AE)
-                        VoiceCallStatus.Speaking -> Color(0xFF82B1FF)
-                        VoiceCallStatus.Processing -> Color(0xFFB388FF)
-                        VoiceCallStatus.Error -> Color(0xFFFF8A80)
-                        VoiceCallStatus.Idle -> Color.White.copy(alpha = 0.5f)
-                    }
-                    val dotAlpha = if (uiState.status == VoiceCallStatus.Idle) 1f else statusPulse
-                    Box(
-                        modifier = Modifier
-                            .size(8.dp)
-                            .background(
-                                color = dotColor.copy(alpha = dotAlpha),
-                                shape = androidx.compose.foundation.shape.CircleShape
-                            )
-                    )
-                    Text(
-                        text = statusText(uiState.status),
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 14.sp
-                    )
-                }
             }
 
-            // 中部: 声波球 + 实时文字
+            // 中部: 流动光球 (不显示对话文字)
             Column(
                 horizontalAlignment = Alignment.CenterHorizontally,
                 modifier = Modifier.weight(1f)
             ) {
                 Spacer(modifier = Modifier.height(40.dp))
 
-                // 声波球
                 VoiceOrb(
                     amplitudes = uiState.amplitudes,
                     status = uiState.status,
                     size = 240.dp
                 )
 
-                Spacer(modifier = Modifier.height(40.dp))
-
-                // 实时转写/回复文字
-                AnimatedVisibility(
-                    visible = uiState.userTranscript.isNotBlank() || uiState.assistantText.isNotBlank(),
-                    enter = fadeIn(),
-                    exit = fadeOut()
-                ) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier.padding(horizontal = 32.dp)
-                    ) {
-                        // 用户转写
-                        if (uiState.userTranscript.isNotBlank()) {
-                            Text(
-                                text = uiState.userTranscript,
-                                color = Color.White.copy(alpha = 0.6f),
-                                fontSize = 14.sp,
-                                textAlign = TextAlign.Center,
-                                maxLines = 3
-                            )
-                        }
-                        // AI 回复
-                        if (uiState.assistantText.isNotBlank()) {
-                            Spacer(modifier = Modifier.height(12.dp))
-                            Text(
-                                text = uiState.assistantText,
-                                color = Color.White,
-                                fontSize = 16.sp,
-                                textAlign = TextAlign.Center,
-                                maxLines = 8
-                            )
-                        }
-                    }
+                // 绑定还没完成时, 显示一个小的加载指示器
+                if (boundService == null) {
+                    Spacer(modifier = Modifier.height(24.dp))
+                    CircularProgressIndicator(
+                        color = Color.White.copy(alpha = 0.5f),
+                        strokeWidth = 2.dp,
+                        modifier = Modifier.size(24.dp)
+                    )
                 }
 
-                // 错误信息
+                // 错误信息 (保留, 方便调试)
                 uiState.errorMessage?.let { error ->
                     Spacer(modifier = Modifier.height(16.dp))
                     Text(
                         text = error,
                         color = MaterialTheme.colorScheme.error,
                         fontSize = 12.sp,
-                        textAlign = TextAlign.Center,
                         modifier = Modifier.padding(horizontal = 32.dp)
                     )
                 }
             }
 
-            // 底部: 控制按钮
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier.padding(bottom = 60.dp)
+            // 底部: 只有两个按钮 (ChatGPT 风格)
+            // 左: 静音, 右: 挂断. 删除中间状态切换按钮和自动发送开关.
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(56.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(bottom = 64.dp)
             ) {
-                // 自动发送模式切换
-                Surface(
-                    onClick = { vm.toggleAutoSend() },
-                    shape = RoundedCornerShape(20.dp),
-                    color = Color.White.copy(alpha = if (uiState.autoSendEnabled) 0.2f else 0.1f)
-                ) {
-                    Text(
-                        text = if (uiState.autoSendEnabled) "自动发送: 开" else "自动发送: 关",
-                        color = Color.White,
-                        fontSize = 12.sp,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
-                    )
-                }
+                // 静音按钮
+                val canControl = boundService != null
+                ControlButton(
+                    icon = if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01,
+                    contentDescription = "静音",
+                    onClick = {
+                        boundService?.toggleMute()
+                    },
+                    backgroundColor = if (uiState.isMuted) {
+                        Color.White.copy(alpha = 0.3f)
+                    } else {
+                        Color.White.copy(alpha = 0.15f)
+                    },
+                    iconTint = Color.White,
+                    enabled = canControl
+                )
 
-                Spacer(modifier = Modifier.height(24.dp))
-
-                // 主控制按钮组
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(40.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    // 静音按钮
-                    ControlButton(
-                        icon = if (uiState.isMuted) HugeIcons.MicOff01 else HugeIcons.Mic01,
-                        contentDescription = "静音",
-                        onClick = { vm.toggleMute(asr) },
-                        backgroundColor = Color.White.copy(alpha = 0.2f),
-                        iconTint = Color.White
-                    )
-
-                    // 中间: 根据状态显示不同按钮
-                    when (uiState.status) {
-                        VoiceCallStatus.Listening -> {
-                            // 手动发送按钮 (自动模式关闭时显示)
-                            if (!uiState.autoSendEnabled) {
-                                ControlButton(
-                                    icon = HugeIcons.Voice,
-                                    contentDescription = "发送",
-                                    onClick = { vm.manualSend(asr, tts) },
-                                    backgroundColor = MaterialTheme.colorScheme.primary,
-                                    iconTint = Color.White,
-                                    size = 72.dp
-                                )
-                            } else {
-                                // 自动模式: 显示正在监听的状态
-                                Box(
-                                    modifier = Modifier.size(72.dp),
-                                    contentAlignment = Alignment.Center
-                                ) {
-                                    CircularProgressIndicator(
-                                        color = Color.White.copy(alpha = 0.5f),
-                                        strokeWidth = 3.dp,
-                                        modifier = Modifier.size(48.dp)
-                                    )
-                                }
-                            }
-                        }
-
-                        VoiceCallStatus.Speaking -> {
-                            // 打断按钮
-                            ControlButton(
-                                icon = HugeIcons.Mic01,
-                                contentDescription = "打断",
-                                onClick = { vm.interruptSpeaking(asr, tts) },
-                                backgroundColor = MaterialTheme.colorScheme.primary,
-                                iconTint = Color.White,
-                                size = 72.dp
-                            )
-                        }
-
-                        VoiceCallStatus.Processing -> {
-                            // 处理中: 加载动画
-                            Box(
-                                modifier = Modifier.size(72.dp),
-                                contentAlignment = Alignment.Center
-                            ) {
-                                CircularProgressIndicator(
-                                    color = Color.White,
-                                    strokeWidth = 3.dp,
-                                    modifier = Modifier.size(48.dp)
-                                )
-                            }
-                        }
-
-                        else -> {
-                            // 开始通话
-                            ControlButton(
-                                icon = HugeIcons.Voice,
-                                contentDescription = "开始",
-                                onClick = { vm.startCall(asr, tts) },
-                                backgroundColor = MaterialTheme.colorScheme.primary,
-                                iconTint = Color.White,
-                                size = 72.dp
-                            )
-                        }
-                    }
-
-                    // 挂断按钮
-                    ControlButton(
-                        icon = HugeIcons.Cancel01,
-                        contentDescription = "挂断",
-                        onClick = {
-                            vm.endCall(asr, tts)
-                            onBack()
-                        },
-                        backgroundColor = MaterialTheme.colorScheme.error,
-                        iconTint = Color.White
-                    )
-                }
+                // 挂断按钮
+                ControlButton(
+                    icon = HugeIcons.Cancel01,
+                    contentDescription = "挂断",
+                    onClick = {
+                        VoiceCallService.stop(context)
+                        onBack()
+                    },
+                    backgroundColor = MaterialTheme.colorScheme.error,
+                    iconTint = Color.White,
+                    enabled = true // 挂断始终可点, 即使 service 还没绑定
+                )
             }
         }
     }
 }
 
 /**
- * 控制按钮
+ * 控制按钮 (圆形)
  */
 @Composable
 private fun ControlButton(
@@ -380,13 +243,15 @@ private fun ControlButton(
     onClick: () -> Unit,
     backgroundColor: Color,
     iconTint: Color,
-    size: Dp = 56.dp,
+    size: Dp = 64.dp,
+    enabled: Boolean = true,
 ) {
     Surface(
         onClick = onClick,
-        shape = androidx.compose.foundation.shape.CircleShape,
-        color = backgroundColor,
-        modifier = Modifier.size(size)
+        shape = CircleShape,
+        color = if (enabled) backgroundColor else backgroundColor.copy(alpha = 0.3f),
+        modifier = Modifier.size(size),
+        enabled = enabled
     ) {
         Box(
             contentAlignment = Alignment.Center,
@@ -395,7 +260,7 @@ private fun ControlButton(
             Icon(
                 imageVector = icon,
                 contentDescription = contentDescription,
-                tint = iconTint,
+                tint = if (enabled) iconTint else iconTint.copy(alpha = 0.5f),
                 modifier = Modifier.size(size * 0.4f)
             )
         }
@@ -404,8 +269,8 @@ private fun ControlButton(
 
 private fun statusText(status: VoiceCallStatus): String = when (status) {
     VoiceCallStatus.Idle -> "准备就绪"
-    VoiceCallStatus.Listening -> "正在聆听..."
-    VoiceCallStatus.Processing -> "正在思考..."
-    VoiceCallStatus.Speaking -> "正在说话..."
+    VoiceCallStatus.Listening -> "聆听中"
+    VoiceCallStatus.Processing -> "思考中"
+    VoiceCallStatus.Speaking -> "说话中"
     VoiceCallStatus.Error -> "出错了"
 }

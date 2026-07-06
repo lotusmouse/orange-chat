@@ -12,6 +12,7 @@
     tools:ignore="ProtectedPermissions" />
   <uses-permission android:name="android.permission.CAMERA" />
   <uses-permission android:name="android.permission.RECORD_AUDIO" />
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
   <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.POST_PROMOTED_NOTIFICATIONS" />
   <uses-permission android:name="android.permission.ACCESS_WIFI_STATE" />
@@ -266,6 +267,12 @@
       android:exported="false"
       android:foregroundServiceType="dataSync"
       android:stopWithTask="false" />
+
+    <!-- Voice Call Background Service -->
+    <service
+      android:name=".service.VoiceCallService"
+      android:exported="false"
+      android:foregroundServiceType="microphone" />
 
     <!-- KeepAlive Restart Receiver（提升国产 ROM 存活率） -->
     <receiver

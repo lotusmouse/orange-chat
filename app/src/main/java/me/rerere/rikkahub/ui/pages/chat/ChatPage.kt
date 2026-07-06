@@ -62,6 +62,7 @@ import me.rerere.rikkahub.data.datastore.getCurrentChatModel
 import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.model.Conversation
 import me.rerere.rikkahub.service.ChatError
+import me.rerere.rikkahub.service.VoiceCallService
 import me.rerere.rikkahub.ui.components.ai.ChatInput
 import me.rerere.rikkahub.ui.context.LocalNavController
 import me.rerere.rikkahub.ui.context.LocalToaster
@@ -281,7 +282,18 @@ private fun ChatPageContent(
                         vm.updateTitle(it)
                     },
                     onVoiceCall = {
-                        navController.navigate(Screen.VoiceCall(conversation.id.toString()))
+                        val activeId = VoiceCallService.activeConversationId.value
+                        when {
+                            activeId == null -> navController.navigate(
+                                Screen.VoiceCall(conversation.id.toString())
+                            )
+                            activeId == conversation.id.toString() -> navController.navigate(
+                                Screen.VoiceCall(conversation.id.toString())
+                            )
+                            else -> {
+                                toaster.show("当前有通话进行中，请先挂断", type = ToastType.Warning)
+                            }
+                        }
                     },
                 )
             },
