@@ -36,6 +36,7 @@ import me.rerere.rikkahub.data.service.DeviceEventTrackingService
 import me.rerere.rikkahub.data.service.DiarySummaryService
 import me.rerere.rikkahub.data.service.ProactiveMessageService
 import me.rerere.rikkahub.data.service.SupabaseSyncService
+import me.rerere.rikkahub.data.service.GatewayPollService
 import me.rerere.rikkahub.service.ChatService
 import me.rerere.rikkahub.service.WebServerService
 import me.rerere.rikkahub.utils.CrashHandler
@@ -121,6 +122,9 @@ class RikkaHubApp : Application() {
         // Reschedule Supabase sync alarm if enabled
         rescheduleSupabaseSyncIfEnabled()
 
+        // Reschedule gateway poll alarm if enabled (橘瓣定时主动 poll 云端网关)
+        rescheduleGatewayPollIfEnabled()
+
         // Start device event tracking (screen on/off realtime listener) if enabled
         startDeviceEventTrackingIfEnabled()
 
@@ -184,6 +188,10 @@ class RikkaHubApp : Application() {
 
     private fun rescheduleSupabaseSyncIfEnabled() {
         SupabaseSyncService.rescheduleIfEnabled(this)
+    }
+
+    private fun rescheduleGatewayPollIfEnabled() {
+        GatewayPollService.rescheduleIfEnabled(this)
     }
 
     private fun startDeviceEventTrackingIfEnabled() {

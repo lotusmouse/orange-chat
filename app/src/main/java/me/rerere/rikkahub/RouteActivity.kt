@@ -125,6 +125,7 @@ import me.rerere.rikkahub.ui.pages.setting.SettingSpeechPage
 import me.rerere.rikkahub.ui.pages.setting.SettingWebPage
 import me.rerere.rikkahub.ui.pages.setting.SettingSystemToolsPage
 import me.rerere.rikkahub.ui.pages.setting.SettingProactiveMessagePage
+import me.rerere.rikkahub.ui.pages.setting.SettingGatewayPollPage
 import me.rerere.rikkahub.plugin.webview.PluginWebViewPage
 import me.rerere.rikkahub.ui.pages.memory.MemoryBankPage
 import me.rerere.rikkahub.ui.components.ui.EmojiPickerPage
@@ -586,6 +587,10 @@ class RouteActivity : ComponentActivity() {
                                 SettingProactiveMessagePage()
                             }
 
+                            entry<Screen.SettingGatewayPoll> {
+                                SettingGatewayPollPage()
+                            }
+
                             entry<Screen.SettingPlugins> {
                                 val nav = LocalNavController.current
                                 me.rerere.rikkahub.plugin.ui.PluginManagePage(
@@ -891,6 +896,9 @@ sealed interface Screen : NavKey {
 
     @Serializable
     data object SettingProactiveMessage : Screen
+
+    @Serializable
+    data object SettingGatewayPoll : Screen
 
     @Serializable
     data object Health : Screen

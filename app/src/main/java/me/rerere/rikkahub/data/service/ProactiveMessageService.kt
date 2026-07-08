@@ -362,6 +362,8 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
     companion object {
         private const val TAG = "ProactiveMessageTrigger"
         private const val MAX_TOOL_STEPS = 5 // 主动消息最大工具调用步数
+        // 外部触发（网关轮询）时跳过内部 minInterval 去重
+        const val EXTRA_FORCE_TRIGGER = "force_trigger"
     }
 
     // 输入转换器（与 ChatService 保持一致）
@@ -386,6 +388,11 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         Log.d(TAG, "=== TriggerService onStartCommand ===")
+        // 外部触发（网关轮询）时跳过内部 minInterval 去重
+        val isForceTrigger = intent?.getBooleanExtra(EXTRA_FORCE_TRIGGER, false) ?: false
+        if (isForceTrigger) {
+            Log.d(TAG, "Force trigger from gateway poll, will skip min interval check")
+        }
         val notification = androidx.core.app.NotificationCompat.Builder(this, CHAT_COMPLETED_NOTIFICATION_CHANNEL_ID)
             .setContentTitle("正在思考...")
             .setSmallIcon(me.rerere.rikkahub.R.drawable.small_icon)
@@ -404,15 +411,19 @@ class ProactiveMessageTriggerService : android.app.Service(), KoinComponent {
                     return@launch
                 }
 
-                // 去重判断：防止 AlarmManager 和 WorkManager 在同一窗口内重复触发
                 val prefs = getSharedPreferences(ProactiveMessageService.PREFS_NAME, Context.MODE_PRIVATE)
-                val lastTriggeredTime = prefs.getLong("last_triggered_time", 0L)
-                val minIntervalMs = proactiveSetting.minIntervalMinutes.coerceAtLeast(1) * 60 * 1000L
-                if (System.currentTimeMillis() - lastTriggeredTime < minIntervalMs) {
-                    Log.d(TAG, "Duplicate trigger within min interval, skipping")
-                    ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
-                    stopSelf()
-                    return@launch
+
+                // 去重判断：防止 AlarmManager 和 WorkManager 在同一窗口内重复触发
+                // 外部触发（网关轮询）跳过此检查，因为网关 poll 是独立信号源，不受内部闹钟链约束
+                if (!isForceTrigger) {
+                    val lastTriggeredTime = prefs.getLong("last_triggered_time", 0L)
+                    val minIntervalMs = proactiveSetting.minIntervalMinutes.coerceAtLeast(1) * 60 * 1000L
+                    if (System.currentTimeMillis() - lastTriggeredTime < minIntervalMs) {
+                        Log.d(TAG, "Duplicate trigger within min interval, skipping")
+                        ProactiveMessageService.scheduleNext(this@ProactiveMessageTriggerService, proactiveSetting)
+                        stopSelf()
+                        return@launch
+                    }
                 }
                 // 立即写入触发时间，防止并发重复
                 prefs.edit().putLong("last_triggered_time", System.currentTimeMillis()).apply()

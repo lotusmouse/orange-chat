@@ -157,6 +157,11 @@ class SettingsStore(
         // 保活服务设置
         val KEEP_ALIVE_ENABLED = booleanPreferencesKey("keep_alive_enabled")
 
+        // 外部网关轮询（橘瓣定时主动 poll 网关的 /api/proactive/poll，决定是否该主动说话）
+        val GATEWAY_POLL_ENABLED = booleanPreferencesKey("gateway_poll_enabled")
+        val GATEWAY_POLL_URL = stringPreferencesKey("gateway_poll_url")
+        val GATEWAY_POLL_API_SECRET = stringPreferencesKey("gateway_poll_api_secret")
+
         // 外置记忆库
         val EXTERNAL_MEMORIES = stringPreferencesKey("external_memories")
     }
@@ -255,6 +260,9 @@ class SettingsStore(
                     JsonInstant.decodeFromString(it)
                 } ?: ProactiveMessageSetting(),
                 keepAliveEnabled = preferences[KEEP_ALIVE_ENABLED] == true,
+                gatewayPollEnabled = preferences[GATEWAY_POLL_ENABLED] == true,
+                gatewayPollUrl = preferences[GATEWAY_POLL_URL] ?: "",
+                gatewayPollApiSecret = preferences[GATEWAY_POLL_API_SECRET] ?: "",
                 externalMemories = preferences[EXTERNAL_MEMORIES]?.let {
                     JsonInstant.decodeFromString(it)
                 } ?: emptyList(),
@@ -422,6 +430,9 @@ class SettingsStore(
             preferences[SYSTEM_TOOLS_SETTING] = JsonInstant.encodeToString(settings.systemToolsSetting)
             preferences[PROACTIVE_MESSAGE_SETTING] = JsonInstant.encodeToString(settings.proactiveMessageSetting)
             preferences[KEEP_ALIVE_ENABLED] = settings.keepAliveEnabled
+            preferences[GATEWAY_POLL_ENABLED] = settings.gatewayPollEnabled
+            preferences[GATEWAY_POLL_URL] = settings.gatewayPollUrl
+            preferences[GATEWAY_POLL_API_SECRET] = settings.gatewayPollApiSecret
             preferences[EXTERNAL_MEMORIES] = JsonInstant.encodeToString(settings.externalMemories)
         }
     }
@@ -553,6 +564,10 @@ data class Settings(
     val systemToolsSetting: SystemToolsSetting = SystemToolsSetting(),
     val proactiveMessageSetting: ProactiveMessageSetting = ProactiveMessageSetting(),
     val keepAliveEnabled: Boolean = false,
+    // 外部网关轮询：橘瓣定时主动 poll 网关，网关心跳决定 MSG 时橘瓣被唤醒走自己的聊天流程
+    val gatewayPollEnabled: Boolean = false,
+    val gatewayPollUrl: String = "",
+    val gatewayPollApiSecret: String = "",
     val externalMemories: List<ExternalMemory> = emptyList(),
 ) {
     companion object {

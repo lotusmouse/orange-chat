@@ -41,6 +41,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import me.rerere.hugeicons.HugeIcons
 import me.rerere.hugeicons.stroke.AiMagic
 import me.rerere.hugeicons.stroke.Alert01
+import me.rerere.hugeicons.stroke.CloudServer
 import me.rerere.hugeicons.stroke.Book01
 import me.rerere.hugeicons.stroke.Book03
 import me.rerere.hugeicons.stroke.Bookshelf01
@@ -261,6 +262,12 @@ fun SettingPage(vm: SettingVM = koinViewModel()) {
                         leadingContent = { Icon(HugeIcons.WavingHand01, null) },
                         supportingContent = { Text("AI 在设定间隔内主动发消息，有记忆有上下文") },
                         headlineContent = { Text("主动消息") },
+                    )
+                    item(
+                        onClick = { navController.navigate(Screen.SettingGatewayPoll) },
+                        leadingContent = { Icon(HugeIcons.CloudServer, null) },
+                        supportingContent = { Text("橘瓣定时主动向云端网关查询是否该说话（绕开内网穿透）") },
+                        headlineContent = { Text("网关轮询") },
                     )
                     item(
                         onClick = { navController.navigate(Screen.Health) },
