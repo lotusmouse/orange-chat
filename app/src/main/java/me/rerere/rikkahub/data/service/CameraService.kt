@@ -12,11 +12,14 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.hardware.display.DisplayManager
 import android.media.Image
 import android.media.ImageReader
+import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
 import android.util.Size
+import android.view.Display
 import android.view.Surface
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
@@ -274,11 +277,10 @@ class CameraService(private val context: Context) {
                                                 CaptureRequest.CONTROL_AE_MODE_ON_AUTO_FLASH
                                             )
                                             
-                                            // 设置方向
-                                            val rotation = context.resources.configuration.orientation
+                                            // 设置方向 - 使用Display.rotation计算正确的JPEG方向
                                             set(
                                                 CaptureRequest.JPEG_ORIENTATION,
-                                                getJpegOrientation(characteristics, rotation)
+                                                getJpegOrientation(characteristics, useFrontCamera)
                                             )
                                         }
                                         
@@ -350,20 +352,43 @@ class CameraService(private val context: Context) {
     
     /**
      * 获取JPEG方向
+     * 使用Display.rotation获取设备实际旋转角度，结合摄像头传感器方向和镜头朝向计算正确的JPEG方向
+     *
+     * @param characteristics 摄像头特性
+     * @param isFrontCamera 是否为前置摄像头（前置需要镜像处理）
+     * @return JPEG方向角度（0/90/180/270）
      */
     private fun getJpegOrientation(
         characteristics: CameraCharacteristics,
-        deviceOrientation: Int
+        isFrontCamera: Boolean
     ): Int {
         val sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION)
             ?: return 0
-        
-        val rotation = when (deviceOrientation) {
-            android.content.res.Configuration.ORIENTATION_LANDSCAPE -> 0
-            else -> 90
+
+        // 获取设备显示的旋转角度
+        // 使用 DisplayManager 获取旋转角度，不要求可视 Context（Activity/WindowContext），
+        // 适合后台服务场景。context.display 和 windowManager.defaultDisplay 在后台会抛
+        // UnsupportedOperationException: Tried to obtain display from a Context not associated with one.
+        val displayManager = context.getSystemService(Context.DISPLAY_SERVICE) as DisplayManager
+        val rotation = displayManager.getDisplay(Display.DEFAULT_DISPLAY)?.rotation ?: Surface.ROTATION_0
+
+        // 将Display rotation转换为角度
+        val degrees = when (rotation) {
+            Surface.ROTATION_0 -> 0
+            Surface.ROTATION_90 -> 90
+            Surface.ROTATION_180 -> 180
+            Surface.ROTATION_270 -> 270
+            else -> 0
         }
-        
-        return (sensorOrientation + rotation) % 360
+
+        // 根据摄像头朝向计算JPEG方向
+        // 后置摄像头: jpegOrientation = (sensorOrientation - degrees + 360) % 360
+        // 前置摄像头(镜像): jpegOrientation = (sensorOrientation + degrees) % 360
+        return if (isFrontCamera) {
+            (sensorOrientation + degrees) % 360
+        } else {
+            (sensorOrientation - degrees + 360) % 360
+        }
     }
     
     /**

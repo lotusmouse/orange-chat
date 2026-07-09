@@ -11,8 +11,10 @@ import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.*
 import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
+import me.rerere.ai.ui.UIMessage
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.datastore.Settings
+import me.rerere.rikkahub.data.files.FilesManager
 import me.rerere.rikkahub.data.service.AmapService
 import me.rerere.rikkahub.data.service.RikkaNotificationListenerService
 import java.text.SimpleDateFormat
@@ -32,6 +34,19 @@ sealed class SystemToolOption {
     @Serializable @SerialName("music") data object Music : SystemToolOption()
     @Serializable @SerialName("sms") data object Sms : SystemToolOption()
     @Serializable @SerialName("supabase_query") data object SupabaseQuery : SystemToolOption()
+    @Serializable @SerialName("torch") data object Torch : SystemToolOption()
+    @Serializable @SerialName("toast") data object Toast : SystemToolOption()
+    @Serializable @SerialName("vibrate") data object Vibrate : SystemToolOption()
+    @Serializable @SerialName("brightness") data object Brightness : SystemToolOption()
+    @Serializable @SerialName("volume") data object Volume : SystemToolOption()
+    @Serializable @SerialName("wifi_info") data object WifiInfo : SystemToolOption()
+    @Serializable @SerialName("telephony_info") data object TelephonyInfo : SystemToolOption()
+    @Serializable @SerialName("share") data object Share : SystemToolOption()
+    @Serializable @SerialName("set_wallpaper") data object SetWallpaper : SystemToolOption()
+    @Serializable @SerialName("wake_screen") data object WakeScreen : SystemToolOption()
+    @Serializable @SerialName("scan_media") data object ScanMedia : SystemToolOption()
+    @Serializable @SerialName("post_notification") data object PostNotification : SystemToolOption()
+    @Serializable @SerialName("storage_info") data object StorageInfo : SystemToolOption()
 }
 
 class SystemTools(private val context: Context, private val settings: Settings) {
@@ -335,9 +350,29 @@ class SystemTools(private val context: Context, private val settings: Settings) 
     private val musicTool by lazy { createMusicTool(context) }
     private val smsTool by lazy { createSmsTool(context) }
 
+    // 新增工具实例
+    private val torchTool by lazy { createTorchTool(context) }
+    private val toastTool by lazy { createToastTool(context) }
+    private val vibrateTool by lazy { createVibrateTool(context) }
+    private val getBrightnessTool by lazy { createGetBrightnessTool(context) }
+    private val setBrightnessTool by lazy { createSetBrightnessTool(context) }
+    private val getVolumeTool by lazy { createGetVolumeTool(context) }
+    private val setVolumeTool by lazy { createSetVolumeTool(context) }
+    private val wifiInfoTool by lazy { createWifiInfoTool(context) }
+    private val telephonyInfoTool by lazy { createTelephonyInfoTool(context) }
+    private val shareTool by lazy { createShareTool(context) }
+    private val wakeScreenTool by lazy { createWakeScreenTool(context) }
+    private val mediaScannerTool by lazy { createMediaScannerTool(context) }
+    private val notificationPostTool by lazy { createNotificationPostTool(context) }
+    private val storageInfoTool by lazy { createStorageInfoTool(context) }
+
     // ==================== 获取工具列表 ====================
 
-    fun getTools(enabledTools: Set<SystemToolOption>): List<Tool> {
+    fun getTools(
+        enabledTools: Set<SystemToolOption>,
+        recentMessages: List<UIMessage> = emptyList(),
+        filesManager: FilesManager? = null,
+    ): List<Tool> {
         val tools = mutableListOf<Tool>()
         if (SystemToolOption.Location in enabledTools) tools.add(locationTool)
         if (SystemToolOption.Notifications in enabledTools) tools.add(notificationsTool)
@@ -350,6 +385,25 @@ class SystemTools(private val context: Context, private val settings: Settings) 
         if (SystemToolOption.Music in enabledTools) tools.add(musicTool)
         if (SystemToolOption.Sms in enabledTools) tools.add(smsTool)
         if (SystemToolOption.SupabaseQuery in enabledTools) tools.add(supabaseQueryTool)
+        if (SystemToolOption.Torch in enabledTools) tools.add(torchTool)
+        if (SystemToolOption.Toast in enabledTools) tools.add(toastTool)
+        if (SystemToolOption.Vibrate in enabledTools) tools.add(vibrateTool)
+        if (SystemToolOption.Brightness in enabledTools) {
+            tools.add(getBrightnessTool)
+            tools.add(setBrightnessTool)
+        }
+        if (SystemToolOption.Volume in enabledTools) {
+            tools.add(getVolumeTool)
+            tools.add(setVolumeTool)
+        }
+        if (SystemToolOption.WifiInfo in enabledTools) tools.add(wifiInfoTool)
+        if (SystemToolOption.TelephonyInfo in enabledTools) tools.add(telephonyInfoTool)
+        if (SystemToolOption.Share in enabledTools) tools.add(shareTool)
+        if (SystemToolOption.SetWallpaper in enabledTools) tools.add(createSetWallpaperTool(context, recentMessages, filesManager))
+        if (SystemToolOption.WakeScreen in enabledTools) tools.add(wakeScreenTool)
+        if (SystemToolOption.ScanMedia in enabledTools) tools.add(mediaScannerTool)
+        if (SystemToolOption.PostNotification in enabledTools) tools.add(notificationPostTool)
+        if (SystemToolOption.StorageInfo in enabledTools) tools.add(storageInfoTool)
         return tools
     }
 }

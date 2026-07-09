@@ -866,7 +866,7 @@ addAll(localTools.getTools(assistant.localTools, conversationId.toString()))
                     val systemToolsOptions = settings.systemToolsSetting.getEnabledOptions()
                     if (systemToolsOptions.isNotEmpty()) {
                         val systemTools = SystemTools(context, settings)
-                        addAll(systemTools.getTools(systemToolsOptions))
+                        addAll(systemTools.getTools(systemToolsOptions, conversation.currentMessages, filesManager))
                     }
                     addAll(createWorkspaceToolsIfReady(assistant.workspaceId?.toString(), conversation.workspaceCwd))
                     if (assistant.enabledSkills.isNotEmpty()) {

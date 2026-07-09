@@ -2,6 +2,7 @@ package me.rerere.ai.provider.providers.openai
 
 import android.util.Log
 import kotlinx.coroutines.Dispatchers
+import me.rerere.common.android.Logging
 import kotlinx.coroutines.channels.awaitClose
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.callbackFlow
@@ -91,7 +92,11 @@ class ChatCompletionsAPI(
 
         val response = client.newCall(request).await()
         if (!response.isSuccessful) {
-            throw Exception("Failed to get response: ${response.code} ${response.body?.string()}")
+            val errorBody = response.body?.string()
+            val errorMsg = "generateText: HTTP ${response.code} error response body: $errorBody"
+            Log.e(TAG, errorMsg)
+            Logging.log(TAG, errorMsg)
+            throw Exception("Failed to get response: ${response.code} $errorBody")
         }
 
         val bodyStr = response.body?.string() ?: ""
@@ -270,7 +275,15 @@ class ChatCompletionsAPI(
                     return
                 }
                 if (chunkJson["error"] != null) {
+                    // 流式响应中携带了 error 字段 (HTTP 连接本身是200, 但错误包在流数据里)
+                    // 记录完整的原始 error JSON 内容, 便于排查上游返回的具体错误原因
+                    val errorRawJson = chunkJson["error"].toString()
+                    val model = chunkJson["model"]?.jsonPrimitive?.contentOrNull ?: "unknown"
+                    val errorMsg = "onEvent stream error | model=$model | time=${System.currentTimeMillis()} | raw error JSON: $errorRawJson"
+                    Log.e(TAG, errorMsg)
+                    Logging.log(TAG, errorMsg)
                     val error = chunkJson["error"]!!.parseErrorDetail()
+                    Logging.log(TAG, "onEvent stream error parsed: $error")
                     close(error)
                     return
                 }
@@ -312,19 +325,29 @@ class ChatCompletionsAPI(
                 var exception = t
 
                 t?.printStackTrace()
-                println("[onFailure] 发生错误: ${t?.javaClass?.name} ${t?.message} / $response")
+                val failureMsg = "onFailure: ${t?.javaClass?.name} ${t?.message} / response=$response"
+                Log.e(TAG, failureMsg)
+                Logging.log(TAG, failureMsg)
 
                 val bodyRaw = response?.body?.stringSafe()
+                // 记录上游返回的原始响应体, 便于排查 400/500 等错误的具体原因
+                if (!bodyRaw.isNullOrBlank()) {
+                    val bodyMsg = "onFailure: raw response body (HTTP ${response?.code}): $bodyRaw"
+                    Log.e(TAG, bodyMsg)
+                    Logging.log(TAG, bodyMsg)
+                }
                 try {
                     if (!bodyRaw.isNullOrBlank()) {
                         val bodyElement = Json.parseToJsonElement(bodyRaw)
-                        println(bodyElement)
                         exception = bodyElement.parseErrorDetail()
-                        Log.i(TAG, "onFailure: $exception")
+                        val detailMsg = "onFailure: parsed error detail: $exception"
+                        Log.e(TAG, detailMsg)
+                        Logging.log(TAG, detailMsg)
                     }
                 } catch (e: Throwable) {
-                    Log.w(TAG, "onFailure: failed to parse from $bodyRaw")
-                    e.printStackTrace()
+                    val parseMsg = "onFailure: failed to parse error body: $bodyRaw"
+                    Log.w(TAG, parseMsg, e)
+                    Logging.log(TAG, parseMsg)
                     exception = e
                 } finally {
                     close(exception)

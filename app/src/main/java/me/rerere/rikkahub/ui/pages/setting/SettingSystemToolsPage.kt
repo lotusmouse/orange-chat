@@ -42,6 +42,19 @@ import me.rerere.hugeicons.stroke.MusicNote03
 import me.rerere.hugeicons.stroke.MusicNote02
 import me.rerere.hugeicons.stroke.Watch01
 import me.rerere.hugeicons.stroke.Pulse01
+import me.rerere.hugeicons.stroke.Flashlight
+import me.rerere.hugeicons.stroke.Megaphone01
+import me.rerere.hugeicons.stroke.Sun02
+import me.rerere.hugeicons.stroke.Speaker01
+import me.rerere.hugeicons.stroke.SmartphoneWifi
+import me.rerere.hugeicons.stroke.SmartPhone01
+import me.rerere.hugeicons.stroke.Share05
+import me.rerere.hugeicons.stroke.Image02
+import me.rerere.hugeicons.stroke.FullScreen
+import me.rerere.hugeicons.stroke.Scan
+import me.rerere.hugeicons.stroke.Notification02
+import me.rerere.hugeicons.stroke.HardDrive
+import me.rerere.hugeicons.stroke.SlidersHorizontal
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.service.KeepAliveService
 import me.rerere.rikkahub.R
@@ -57,6 +70,7 @@ import me.rerere.rikkahub.ui.components.ui.permission.PermissionManager
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionInfo
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionPostNotifications
 import me.rerere.rikkahub.ui.components.ui.permission.PermissionReadSms
+import me.rerere.rikkahub.ui.components.ui.permission.PermissionReadPhoneState
 import me.rerere.rikkahub.ui.components.ui.permission.rememberPermissionState
 import me.rerere.rikkahub.ui.theme.CustomColors
 import me.rerere.rikkahub.utils.plus
@@ -104,6 +118,8 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
     val cameraPermissionState = rememberPermissionState(permissions = setOf(PermissionCamera))
 
     val smsPermissionState = rememberPermissionState(permissions = setOf(PermissionReadSms))
+
+    val phoneStatePermissionState = rememberPermissionState(permissions = setOf(PermissionReadPhoneState))
 
     Scaffold(
         topBar = {
@@ -727,11 +743,308 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
+            // 手电筒
+            item {
+                CardGroup(title = { Text("手电筒") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Flashlight, contentDescription = null) },
+                        headlineContent = { Text("启用手电筒工具") },
+                        supportingContent = { Text("允许AI开关设备手电筒，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.torchEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(torchEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // Toast提示
+            item {
+                CardGroup(title = { Text("Toast提示") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Megaphone01, contentDescription = null) },
+                        headlineContent = { Text("启用Toast工具") },
+                        supportingContent = { Text("允许AI弹出简短Toast提示，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.toastEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(toastEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 震动
+            item {
+                CardGroup(title = { Text("震动") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.SmartPhone01, contentDescription = null) },
+                        headlineContent = { Text("启用震动工具") },
+                        supportingContent = { Text("允许AI控制设备震动，支持单次或波形震动，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.vibrateEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(vibrateEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 屏幕亮度
+            item {
+                CardGroup(title = { Text("屏幕亮度") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Sun02, contentDescription = null) },
+                        headlineContent = { Text("启用亮度工具") },
+                        supportingContent = { Text("允许AI读取和设置屏幕亮度。写入亮度需要WRITE_SETTINGS特殊权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.brightnessEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(brightnessEnabled = enabled)) }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.brightnessEnabled) {
+                        item(
+                            headlineContent = { Text("修改系统设置权限") },
+                            supportingContent = {
+                                if (android.provider.Settings.System.canWrite(context)) Text("✓ 已授予修改系统设置权限") else Text("⚠ 设置亮度需要在系统设置中授予修改系统设置权限")
+                            },
+                            trailingContent = {
+                                if (!android.provider.Settings.System.canWrite(context)) {
+                                    FilledTonalButton(onClick = {
+                                        try {
+                                            val intent = Intent(android.provider.Settings.ACTION_MANAGE_WRITE_SETTINGS)
+                                            intent.data = android.net.Uri.parse("package:${context.packageName}")
+                                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                            context.startActivity(intent)
+                                        } catch (_: Exception) {}
+                                    }) { Text("去设置") }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 音量控制
+            item {
+                CardGroup(title = { Text("音量控制") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Speaker01, contentDescription = null) },
+                        headlineContent = { Text("启用音量工具") },
+                        supportingContent = { Text("允许AI读取和设置系统音量。修改铃声/通知音量需要勿扰权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.volumeEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(volumeEnabled = enabled)) }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.volumeEnabled) {
+                        item(
+                            headlineContent = { Text("勿扰访问权限") },
+                            supportingContent = {
+                                val nm = context.getSystemService(android.app.NotificationManager::class.java)
+                                val granted = try { nm?.isNotificationPolicyAccessGranted == true } catch (_: Exception) { false }
+                                if (granted) Text("✓ 勿扰访问权限已授予") else Text("⚠ 修改铃声/通知音量需要勿扰访问权限")
+                            },
+                            trailingContent = {
+                                val nm = context.getSystemService(android.app.NotificationManager::class.java)
+                                val granted = try { nm?.isNotificationPolicyAccessGranted == true } catch (_: Exception) { false }
+                                if (!granted) {
+                                    FilledTonalButton(onClick = {
+                                        try { context.startActivity(Intent(android.provider.Settings.ACTION_NOTIFICATION_POLICY_ACCESS_SETTINGS)) } catch (_: Exception) {}
+                                    }) { Text("去设置") }
+                                }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // WiFi信息
+            item {
+                CardGroup(title = { Text("WiFi信息") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.SmartphoneWifi, contentDescription = null) },
+                        headlineContent = { Text("启用WiFi信息工具") },
+                        supportingContent = { Text("允许AI读取WiFi连接信息（SSID/信号强度/IP等），需要位置权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.wifiInfoEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && !locationPermissionState.allPermissionsGranted) locationPermissionState.requestPermissions()
+                                    updateSystemToolsSetting(systemToolsSetting.copy(wifiInfoEnabled = enabled))
+                                }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.wifiInfoEnabled && !locationPermissionState.allPermissionsGranted) {
+                        item(
+                            headlineContent = { Text("⚠ 位置权限未授予") },
+                            supportingContent = { Text("读取WiFi信息需要位置权限") },
+                            trailingContent = {
+                                FilledTonalButton(onClick = { locationPermissionState.requestPermissions() }) { Text("授权") }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 电话信息
+            item {
+                CardGroup(title = { Text("电话信息") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.SmartPhone01, contentDescription = null) },
+                        headlineContent = { Text("启用电话信息工具") },
+                        supportingContent = { Text("允许AI读取SIM卡/运营商/网络类型信息，需要READ_PHONE_STATE权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.telephonyInfoEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && !phoneStatePermissionState.allPermissionsGranted) phoneStatePermissionState.requestPermissions()
+                                    updateSystemToolsSetting(systemToolsSetting.copy(telephonyInfoEnabled = enabled))
+                                }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.telephonyInfoEnabled && !phoneStatePermissionState.allPermissionsGranted) {
+                        item(
+                            headlineContent = { Text("⚠ 电话状态权限未授予") },
+                            supportingContent = { Text("点击授权按钮授予电话状态读取权限") },
+                            trailingContent = {
+                                FilledTonalButton(onClick = { phoneStatePermissionState.requestPermissions() }) { Text("授权") }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 分享
+            item {
+                CardGroup(title = { Text("分享") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Share05, contentDescription = null) },
+                        headlineContent = { Text("启用分享工具") },
+                        supportingContent = { Text("允许AI通过系统分享面板分享文字/URL，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.shareEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(shareEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 设置壁纸
+            item {
+                CardGroup(title = { Text("设置壁纸") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Image02, contentDescription = null) },
+                        headlineContent = { Text("启用壁纸工具") },
+                        supportingContent = { Text("允许AI从本地图片文件设置壁纸（主屏/锁屏/两者），无需特殊权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.setWallpaperEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(setWallpaperEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 唤醒屏幕
+            item {
+                CardGroup(title = { Text("唤醒屏幕") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.FullScreen, contentDescription = null) },
+                        headlineContent = { Text("启用唤醒屏幕工具") },
+                        supportingContent = { Text("允许AI唤醒黑屏设备，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.wakeScreenEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(wakeScreenEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 媒体扫描
+            item {
+                CardGroup(title = { Text("媒体扫描") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Scan, contentDescription = null) },
+                        headlineContent = { Text("启用媒体扫描工具") },
+                        supportingContent = { Text("允许AI通知媒体库扫描指定文件路径，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.scanMediaEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(scanMediaEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
+            // 发送通知
+            item {
+                CardGroup(title = { Text("发送通知") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Notification02, contentDescription = null) },
+                        headlineContent = { Text("启用发送通知工具") },
+                        supportingContent = { Text("允许AI主动发送系统通知，需要通知权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.postNotificationEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && !notificationPermissionState.allPermissionsGranted) notificationPermissionState.requestPermissions()
+                                    updateSystemToolsSetting(systemToolsSetting.copy(postNotificationEnabled = enabled))
+                                }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.postNotificationEnabled && !notificationPermissionState.allPermissionsGranted) {
+                        item(
+                            headlineContent = { Text("⚠ 通知权限未授予") },
+                            supportingContent = { Text("发送通知需要通知权限") },
+                            trailingContent = {
+                                FilledTonalButton(onClick = { notificationPermissionState.requestPermissions() }) { Text("授权") }
+                            }
+                        )
+                    }
+                }
+            }
+
+            // 存储信息
+            item {
+                CardGroup(title = { Text("存储信息") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.HardDrive, contentDescription = null) },
+                        headlineContent = { Text("启用存储信息工具") },
+                        supportingContent = { Text("允许AI读取内部/外部存储空间使用情况，无需额外权限") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.storageInfoEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(storageInfoEnabled = enabled)) }
+                            )
+                        }
+                    )
+                }
+            }
+
         }
 
         PermissionManager(permissionState = locationPermissionState)
         PermissionManager(permissionState = notificationPermissionState)
         PermissionManager(permissionState = cameraPermissionState)
         PermissionManager(permissionState = smsPermissionState)
+        PermissionManager(permissionState = phoneStatePermissionState)
     }
 }

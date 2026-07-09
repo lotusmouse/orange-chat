@@ -1,6 +1,7 @@
 package me.rerere.rikkahub.data.ai.tools
 
 import android.content.Context
+import android.graphics.BitmapFactory
 import kotlinx.coroutines.runBlocking
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.jsonObject
@@ -11,6 +12,7 @@ import me.rerere.ai.core.InputSchema
 import me.rerere.ai.core.Tool
 import me.rerere.ai.ui.UIMessagePart
 import me.rerere.rikkahub.data.service.CameraService
+import me.rerere.rikkahub.utils.ImageUtils
 import java.io.File
 
 fun createCameraTool(context: Context): Tool {
@@ -56,11 +58,35 @@ fun createCameraTool(context: Context): Tool {
                     ))
                 }
 
-                // Save image to file and return as UIMessagePart.Image so AI can see it
+                // Save original high-res photo to file (preserved for user)
                 val cameraDir = File(context.filesDir, "camera_captures").apply { mkdirs() }
-                val imageFile = File(cameraDir, "capture_${System.currentTimeMillis()}.jpg")
-                imageFile.outputStream().use { output ->
+                val originalFile = File(cameraDir, "capture_${System.currentTimeMillis()}_original.jpg")
+                originalFile.outputStream().use { output ->
                     output.write(result.imageData)
+                }
+
+                // Compress image for AI - limit to 2048px max dimension, JPEG quality 85
+                // This prevents sending oversized images to vision APIs (which can cause 400 errors)
+                val compressedForAI = try {
+                    val originalBitmap = BitmapFactory.decodeByteArray(result.imageData, 0, result.imageData.size)
+                    if (originalBitmap != null) {
+                        val compressed = ImageUtils.compressBitmapForAI(originalBitmap, maxSize = 2048, quality = 85)
+                        // Save compressed version as a separate file for AI
+                        val compressedFile = File(cameraDir, "capture_${System.currentTimeMillis()}_ai.jpg")
+                        compressedFile.outputStream().use { output ->
+                            output.write(compressed)
+                        }
+                        if (!originalBitmap.isRecycled) {
+                            originalBitmap.recycle()
+                        }
+                        "file://${compressedFile.absolutePath}"
+                    } else {
+                        // If bitmap decode fails, fall back to original
+                        "file://${originalFile.absolutePath}"
+                    }
+                } catch (e: Exception) {
+                    // If compression fails, fall back to original file
+                    "file://${originalFile.absolutePath}"
                 }
 
                 listOf(
@@ -71,7 +97,7 @@ fun createCameraTool(context: Context): Tool {
                         }.toString()
                     ),
                     UIMessagePart.Image(
-                        url = "file://${imageFile.absolutePath}"
+                        url = compressedForAI
                     )
                 )
             } catch (e: Exception) {

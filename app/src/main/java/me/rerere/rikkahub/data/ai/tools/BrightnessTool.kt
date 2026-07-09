@@ -106,7 +106,6 @@ fun createSetBrightnessTool(context: Context): Tool = Tool(
             val clampedValue = value.coerceAtLeast(1).coerceAtMost(255)
             val cr = context.contentResolver
 
-            // Disable auto-brightness first, otherwise it will override our setting
             try {
                 Settings.System.putInt(
                     cr,

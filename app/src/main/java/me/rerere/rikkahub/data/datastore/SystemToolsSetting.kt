@@ -58,6 +58,21 @@ data class SystemToolsSetting(
     val smsEnabled: Boolean = false,
 
     // Feature 21: AI Song Generation (Suno + RVC)
+
+    // New system tools (batch 1)
+    val torchEnabled: Boolean = false,
+    val toastEnabled: Boolean = false,
+    val vibrateEnabled: Boolean = false,
+    val brightnessEnabled: Boolean = false,
+    val volumeEnabled: Boolean = false,
+    val wifiInfoEnabled: Boolean = false,
+    val telephonyInfoEnabled: Boolean = false,
+    val shareEnabled: Boolean = false,
+    val setWallpaperEnabled: Boolean = false,
+    val wakeScreenEnabled: Boolean = false,
+    val scanMediaEnabled: Boolean = false,
+    val postNotificationEnabled: Boolean = false,
+    val storageInfoEnabled: Boolean = false,
 ) {
     fun getEnabledOptions(): Set<me.rerere.rikkahub.data.ai.tools.SystemToolOption> {
         val options = mutableSetOf<me.rerere.rikkahub.data.ai.tools.SystemToolOption>()
@@ -74,6 +89,19 @@ data class SystemToolsSetting(
         if (supabaseEnabled && supabaseUrl.isNotBlank() && supabaseApiKey.isNotBlank()) {
             options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SupabaseQuery)
         }
+        if (torchEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Torch)
+        if (toastEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Toast)
+        if (vibrateEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Vibrate)
+        if (brightnessEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Brightness)
+        if (volumeEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Volume)
+        if (wifiInfoEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.WifiInfo)
+        if (telephonyInfoEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.TelephonyInfo)
+        if (shareEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.Share)
+        if (setWallpaperEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.SetWallpaper)
+        if (wakeScreenEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.WakeScreen)
+        if (scanMediaEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.ScanMedia)
+        if (postNotificationEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.PostNotification)
+        if (storageInfoEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.StorageInfo)
         return options
     }
 }

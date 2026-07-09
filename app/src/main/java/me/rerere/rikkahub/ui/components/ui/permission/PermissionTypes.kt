@@ -132,3 +132,10 @@ val PermissionWriteCalendar = PermissionInfo(
     required = false
 )
 
+
+val PermissionReadPhoneState = PermissionInfo(
+    permission = Manifest.permission.READ_PHONE_STATE,
+    displayName = { Text("电话状态读取权限") },
+    usage = { Text("用于读取SIM卡和运营商信息") },
+    required = true
+)

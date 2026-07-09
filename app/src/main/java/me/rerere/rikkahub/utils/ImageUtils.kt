@@ -251,6 +251,54 @@ object ImageUtils {
         return Result.success(regex.find(value)?.groupValues?.get(1) ?: error("No character data found"))
     }
 
+
+    /**
+     * 压缩Bitmap用于发送给AI视觉模型
+     * 如果长边超过maxSize像素，等比例缩小到maxSize像素
+     * JPEG压缩质量85，足够视觉识别使用
+     *
+     * @param bitmap 原始Bitmap
+     * @param maxSize 长边最大像素数，默认2048（与ImgGenPage中的maxSize一致）
+     * @param quality JPEG压缩质量，默认85
+     * @return 压缩后的ByteArray
+     */
+    fun compressBitmapForAI(
+        bitmap: Bitmap,
+        maxSize: Int = 2048,
+        quality: Int = 85
+    ): ByteArray {
+        val width = bitmap.width
+        val height = bitmap.height
+
+        // 计算缩放比例
+        val maxDimension = maxOf(width, height)
+        val scale = if (maxDimension > maxSize) {
+            maxSize.toFloat() / maxDimension
+        } else {
+            1.0f
+        }
+
+        // 如果需要缩放，创建缩放后的Bitmap
+        val scaledBitmap = if (scale < 1.0f) {
+            val newWidth = (width * scale).toInt()
+            val newHeight = (height * scale).toInt()
+            Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        } else {
+            bitmap
+        }
+
+        // 压缩为JPEG
+        val outputStream = java.io.ByteArrayOutputStream()
+        scaledBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+
+        // 回收缩放后的Bitmap（如果创建了新的）
+        if (scaledBitmap != bitmap && !scaledBitmap.isRecycled) {
+            scaledBitmap.recycle()
+        }
+
+        return outputStream.toByteArray()
+    }
+
     data class ImageInfo(
         val width: Int,
         val height: Int,
