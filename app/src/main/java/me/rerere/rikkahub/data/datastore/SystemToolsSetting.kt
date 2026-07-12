@@ -77,6 +77,9 @@ data class SystemToolsSetting(
     val postNotificationEnabled: Boolean = false,
     val storageInfoEnabled: Boolean = false,
     val appSwitchEnabled: Boolean = false,
+
+    // App Lock: 锁定指定 App, 检测到其被打开时拦截并要求密码解锁
+    val appLockEnabled: Boolean = false,
 ) {
     fun getEnabledOptions(): Set<me.rerere.rikkahub.data.ai.tools.SystemToolOption> {
         val options = mutableSetOf<me.rerere.rikkahub.data.ai.tools.SystemToolOption>()
@@ -108,6 +111,7 @@ data class SystemToolsSetting(
         if (postNotificationEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.PostNotification)
         if (storageInfoEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.StorageInfo)
         if (appSwitchEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.AppSwitch)
+        if (appLockEnabled) options.add(me.rerere.rikkahub.data.ai.tools.SystemToolOption.AppLock)
         return options
     }
 }

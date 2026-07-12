@@ -1082,6 +1082,36 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                 }
             }
 
+            // App 锁定
+            item {
+                CardGroup(title = { Text("App 锁定") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.SmartPhone01, contentDescription = null) },
+                        headlineContent = { Text("启用 App 锁定工具") },
+                        supportingContent = { Text("允许 AI 锁定指定 App；之后打开该 App 会被拦截，需输入密码验证才能继续使用。依赖无障碍服务检测前台应用，不是系统级强制限制，关闭无障碍权限即可绕过") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.appLockEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(appLockEnabled = enabled)) }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.appLockEnabled &&
+                        !me.rerere.rikkahub.data.ai.tools.local.AccessibilityServiceHandle.isEnabledInSettings(context)
+                    ) {
+                        item(
+                            headlineContent = { Text("⚠ 无障碍服务未启用") },
+                            supportingContent = { Text("App 锁定依赖无障碍服务检测前台应用切换，请在系统设置中开启橘瓣的无障碍权限") },
+                            trailingContent = {
+                                FilledTonalButton(onClick = {
+                                    try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
+                                }) { Text("去设置") }
+                            }
+                        )
+                    }
+                }
+            }
+
         }
 
         PermissionManager(permissionState = locationPermissionState)

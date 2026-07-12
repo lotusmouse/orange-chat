@@ -84,9 +84,13 @@ object AppForegroundDispatcher {
     @Volatile private var foregroundConsumerCount: Int = 0
     internal fun bind(f: AppForegroundTriggerFamily) { family = f }
 
+    private val extraListeners = java.util.concurrent.CopyOnWriteArrayList<(String?) -> Unit>()
+    fun addListener(listener: (String?) -> Unit) { extraListeners.add(listener) }
+    fun removeListener(listener: (String?) -> Unit) { extraListeners.remove(listener) }
+
     /**
      * Track how many workflows currently NEED the foreground-package cache. The trigger
-     * registry calls this on every resync — if zero workflows have an `app_launched`/`_closed`
+     * registry calls this on every resync - if zero workflows have an `app_launched`/`_closed`
      * trigger AND no condition uses `foreground_app_*`, the dispatcher's hot path can no-op
      * entirely. Without this gate the accessibility service writes the volatile cache on
      * every TYPE_WINDOW_STATE_CHANGED event (which fires multiple times per app switch +
@@ -96,15 +100,12 @@ object AppForegroundDispatcher {
 
     /** Called from accessibility service's TYPE_WINDOW_STATE_CHANGED handler. */
     fun onForegroundChange(packageName: String?) {
-        // Hot-path gate — skip the volatile write entirely when no workflow needs it.
-        // This is called from the AccessibilityService's dispatcher thread for every
-        // window-state-change. Cheap rejection here matters.
-        if (family == null && foregroundConsumerCount == 0) return
-        // De-dupe: don't re-write the cache or fan out if the package didn't change.
+        if (family == null && foregroundConsumerCount == 0 && extraListeners.isEmpty()) return
         val prev = AppForegroundLastKnown.value
         if (prev == packageName) return
         AppForegroundLastKnown.value = packageName
         family?.onForegroundChange(packageName)
+        extraListeners.forEach { it(packageName) }
     }
 }
 

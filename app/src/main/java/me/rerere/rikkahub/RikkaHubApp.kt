@@ -131,6 +131,9 @@ class RikkaHubApp : Application() {
         // Start network change monitor (invalidates SSH DNS cache on WiFi<->cell handoff)
         startNetworkChangeMonitor()
 
+        // Start App Lock guard (intercepts locked apps when opened) if any app is locked
+        startAppLockGuardIfEnabled()
+
         // Start aggressive mode (device event AI trigger) if enabled
         startAggressiveModeIfEnabled()
 
@@ -220,6 +223,14 @@ class RikkaHubApp : Application() {
             me.rerere.rikkahub.utils.NetworkChangeMonitor.start(this)
         }.onFailure {
             Log.e(TAG, "startNetworkChangeMonitor failed", it)
+        }
+    }
+
+    private fun startAppLockGuardIfEnabled() {
+        runCatching {
+            me.rerere.rikkahub.data.service.AppLockGuard.init(this)
+        }.onFailure {
+            Log.e(TAG, "startAppLockGuardIfEnabled failed", it)
         }
     }
 
