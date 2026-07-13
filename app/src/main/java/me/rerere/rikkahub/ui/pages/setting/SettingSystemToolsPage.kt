@@ -55,6 +55,8 @@ import me.rerere.hugeicons.stroke.Scan
 import me.rerere.hugeicons.stroke.Notification02
 import me.rerere.hugeicons.stroke.HardDrive
 import me.rerere.hugeicons.stroke.SlidersHorizontal
+import me.rerere.hugeicons.stroke.FingerPrint
+import me.rerere.hugeicons.stroke.Download04
 import me.rerere.rikkahub.data.ai.tools.SystemTools
 import me.rerere.rikkahub.service.KeepAliveService
 import me.rerere.rikkahub.R
@@ -1107,6 +1109,68 @@ fun SettingSystemToolsPage(vm: SettingVM = koinViewModel()) {
                                     try { context.startActivity(Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)) } catch (_: Exception) {}
                                 }) { Text("去设置") }
                             }
+                        )
+                    }
+                }
+            }
+
+            // 指纹验证
+            item {
+                CardGroup(title = { Text("指纹验证") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.FingerPrint, contentDescription = null) },
+                        headlineContent = { Text("启用指纹验证工具") },
+                        supportingContent = { Text("允许 AI 弹出系统指纹/人脸验证框验证用户身份（如执行敏感操作前确认是本人）。需设备已录入指纹或人脸") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.fingerprintEnabled,
+                                onCheckedChange = { enabled -> updateSystemToolsSetting(systemToolsSetting.copy(fingerprintEnabled = enabled)) }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.fingerprintEnabled) {
+                        item(
+                            headlineContent = { Text("说明") },
+                            supportingContent = { Text("AI 可在需要时调用 verify_fingerprint 工具弹出系统生物识别提示框。开启 allow_device_credential 后允许在无指纹或验证失败时回退到设备 PIN/密码。验证结果会返回给 AI（成功/取消/超时等）。") }
+                        )
+                    }
+                }
+            }
+
+            // 文件下载
+            item {
+                CardGroup(title = { Text("文件下载") }, modifier = Modifier.padding(horizontal = 8.dp)) {
+                    item(
+                        leadingContent = { Icon(imageVector = HugeIcons.Download04, contentDescription = null) },
+                        headlineContent = { Text("启用文件下载工具") },
+                        supportingContent = { Text("允许 AI 通过系统下载器把文件下载到公共 Downloads 目录。调用后立即返回，实际下载在系统后台进行") },
+                        trailingContent = {
+                            Switch(
+                                checked = systemToolsSetting.downloadEnabled,
+                                onCheckedChange = { enabled ->
+                                    if (enabled && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU
+                                        && !notificationPermissionState.allPermissionsGranted
+                                    ) {
+                                        notificationPermissionState.requestPermissions()
+                                    }
+                                    updateSystemToolsSetting(systemToolsSetting.copy(downloadEnabled = enabled))
+                                }
+                            )
+                        }
+                    )
+                    if (systemToolsSetting.downloadEnabled) {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !notificationPermissionState.allPermissionsGranted) {
+                            item(
+                                headlineContent = { Text("⚠ 通知权限未授予") },
+                                supportingContent = { Text("Android 13+ 需要通知权限才能显示下载进度通知（无权限下载仍可进行，只是看不到通知）") },
+                                trailingContent = {
+                                    FilledTonalButton(onClick = { notificationPermissionState.requestPermissions() }) { Text("授权") }
+                                }
+                            )
+                        }
+                        item(
+                            headlineContent = { Text("说明") },
+                            supportingContent = { Text("AI 可调用 download_file 工具传入 URL 下载文件，可选指定 filename。文件保存到设备的「下载」目录，下载进度由系统通知栏显示。") }
                         )
                     }
                 }

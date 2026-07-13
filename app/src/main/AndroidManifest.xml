@@ -150,6 +150,11 @@
           android:scheme="rikkahub" />
       </intent-filter>
     </activity>
+    <!-- Fingerprint: verify_fingerprint 工具的透明宿主 Activity, 承载系统 BiometricPrompt -->
+    <activity
+      android:name=".ui.activity.BiometricPromptActivity"
+      android:exported="false"
+      android:theme="@android:style/Theme.Translucent.NoTitleBar" />
     <activity
       android:name="com.yalantis.ucrop.UCropActivity"
       android:theme="@style/Theme.AppCompat.Light.NoActionBar" />

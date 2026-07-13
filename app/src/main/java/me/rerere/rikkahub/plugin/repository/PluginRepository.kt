@@ -12,8 +12,20 @@ import kotlinx.coroutines.flow.map
 import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.Serializable
 import me.rerere.rikkahub.plugin.model.PluginFolder
 import kotlin.uuid.Uuid
+
+/**
+ * 插件设置导出数据类
+ */
+@Serializable
+data class PluginSettingsExport(
+    val enabled: Map<String, Boolean> = emptyMap(),
+    val configs: Map<String, Map<String, JsonElement>> = emptyMap(),
+    val folders: List<PluginFolder> = emptyList(),
+    val assignments: Map<String, String> = emptyMap(),
+)
 
 /**
  * 插件数据仓库
@@ -121,6 +133,55 @@ class PluginRepository(
     suspend fun clearAll() {
         context.dataStore.edit { prefs ->
             prefs.clear()
+        }
+    }
+
+    /**
+     * 导出所有插件相关配置（启用状态、配置、文件夹、插件-文件夹关联）
+     */
+    suspend fun exportPluginSettings(): PluginSettingsExport {
+        return context.dataStore.data.map { prefs ->
+            val enabledMap = mutableMapOf<String, Boolean>()
+            val configMap = mutableMapOf<String, Map<String, JsonElement>>()
+            prefs.asMap().keys.forEach { key ->
+                when {
+                    key.name.startsWith("plugin_enabled_") -> {
+                        val pluginId = key.name.removePrefix("plugin_enabled_")
+                        (prefs[key] as? Boolean)?.let { enabledMap[pluginId] = it }
+                    }
+                    key.name.startsWith("plugin_config_") -> {
+                        val pluginId = key.name.removePrefix("plugin_config_")
+                        val configJson = prefs[key] as? String ?: "{}"
+                        try {
+                            configMap[pluginId] = json.decodeFromString<Map<String, JsonElement>>(configJson)
+                        } catch (_: Exception) {
+                            configMap[pluginId] = emptyMap()
+                        }
+                    }
+                }
+            }
+            PluginSettingsExport(
+                enabled = enabledMap,
+                configs = configMap,
+                folders = getFolders(),
+                assignments = getFolderAssignments()
+            )
+        }.first()
+    }
+
+    /**
+     * 导入插件配置（追加/覆盖现有配置）
+     */
+    suspend fun importPluginSettings(export: PluginSettingsExport) {
+        context.dataStore.edit { prefs ->
+            export.enabled.forEach { (pluginId, enabled) ->
+                prefs[booleanPreferencesKey("plugin_enabled_$pluginId")] = enabled
+            }
+            export.configs.forEach { (pluginId, config) ->
+                prefs[stringPreferencesKey("plugin_config_$pluginId")] = json.encodeToString(config)
+            }
+            prefs[stringPreferencesKey("plugin_folders")] = json.encodeToString(export.folders)
+            prefs[stringPreferencesKey("plugin_folder_assignments")] = json.encodeToString(export.assignments)
         }
     }
 

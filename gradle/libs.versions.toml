@@ -52,6 +52,7 @@ mcp = "0.14.0"
 pebble = "4.1.1"
 browser = "1.10.0"
 appcompat = "1.7.1"
+biometric = "1.1.0"
 material = "1.14.0"
 ucrop = "2.2.11-native"
 haze = "1.7.2"
@@ -149,6 +150,7 @@ modelcontextprotocol-kotlin-sdk = { module = "io.modelcontextprotocol:kotlin-sdk
 pebble = { module = "io.pebbletemplates:pebble", version.ref = "pebble" }
 androidx-browser = { group = "androidx.browser", name = "browser", version.ref = "browser" }
 androidx-appcompat = { group = "androidx.appcompat", name = "appcompat", version.ref = "appcompat" }
+androidx-biometric = { group = "androidx.biometric", name = "biometric", version.ref = "biometric" }
 material = { group = "com.google.android.material", name = "material", version.ref = "material" }
 ucrop = { group = "com.github.yalantis", name = "ucrop", version.ref = "ucrop" }
 haze = { module = "dev.chrisbanes.haze:haze", version.ref = "haze" }

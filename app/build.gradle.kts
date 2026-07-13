@@ -159,6 +159,9 @@ dependencies {
     implementation(libs.androidx.work.runtime.ktx)
     implementation(libs.androidx.browser)
     implementation(libs.androidx.profileinstaller)
+
+    // BiometricPrompt (fingerprint/face verify_fingerprint tool)
+    implementation(libs.androidx.biometric)
     implementation(libs.termux.terminal.view)
     implementation(libs.guava.listenablefuture)
 

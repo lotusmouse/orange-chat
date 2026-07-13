@@ -12,6 +12,9 @@ import me.rerere.rikkahub.data.datastore.Settings
 import me.rerere.rikkahub.data.datastore.SettingsStore
 import me.rerere.rikkahub.data.datastore.WebDavConfig
 import me.rerere.rikkahub.data.datastore.migration.SettingsJsonMigrator
+import me.rerere.rikkahub.plugin.repository.PluginRepository
+import me.rerere.rikkahub.plugin.repository.PluginSettingsExport
+import me.rerere.rikkahub.plugin.scanner.PluginScanner
 import me.rerere.rikkahub.utils.fileSizeToString
 import java.io.File
 import java.io.FileInputStream
@@ -30,6 +33,7 @@ class WebDavSync(
     private val json: Json,
     private val context: Context,
     private val httpClient: HttpClient,
+    private val pluginRepository: PluginRepository,
 ) {
     private fun getClient(config: WebDavConfig): WebDavClient {
         return WebDavClient(config, httpClient)
@@ -43,7 +47,7 @@ class WebDavSync(
     }
 
     suspend fun backup(config: WebDavConfig) = withContext(Dispatchers.IO) {
-        val file = prepareBackupFile(config)
+        val file = prepareBackupFile(config, includePlugins = false)
         val client = getClient(config)
 
         // Ensure the backup directory exists
@@ -95,7 +99,7 @@ class WebDavSync(
             Log.i(TAG, "restore: Downloaded ${backupFile.length().fileSizeToString()}")
 
             // Restore from backup file
-            restoreFromBackupFile(backupFile, config)
+            restoreFromBackupFile(backupFile, config, includePlugins = false)
         } finally {
             // Clean up temp file
             if (backupFile.exists()) {
@@ -123,7 +127,7 @@ class WebDavSync(
         }
 
         try {
-            restoreFromBackupFile(file, config)
+            restoreFromBackupFile(file, config, includePlugins = true)
             Log.i(TAG, "restoreFromLocalFile: Restore completed successfully")
         } catch (e: Exception) {
             Log.e(TAG, "restoreFromLocalFile: Failed to restore from local file", e)
@@ -131,7 +135,10 @@ class WebDavSync(
         }
     }
 
-    suspend fun prepareBackupFile(config: WebDavConfig): File = withContext(Dispatchers.IO) {
+    suspend fun prepareBackupFile(
+        config: WebDavConfig,
+        includePlugins: Boolean = true
+    ): File = withContext(Dispatchers.IO) {
         val timestamp = LocalDateTime.now().format(DateTimeFormatter.ofPattern("yyyyMMdd_HHmmss"))
         val backupFile = File(context.cacheDir, "backup_$timestamp.zip")
 
@@ -191,6 +198,34 @@ class WebDavSync(
                 } else {
                     Log.w(TAG, "prepareBackupFile: Skills folder does not exist or is not a directory")
                 }
+
+                // Backup plugin settings and plugin folders (only for local backup/export)
+                if (includePlugins) {
+                    try {
+                        val pluginSettings = pluginRepository.exportPluginSettings()
+                        addVirtualFileToZip(
+                            zipOut = zipOut,
+                            name = "plugin_settings.json",
+                            content = json.encodeToString(pluginSettings)
+                        )
+                        Log.i(TAG, "prepareBackupFile: Backed up plugin settings")
+                    } catch (e: Exception) {
+                        Log.e(TAG, "prepareBackupFile: Failed to back up plugin settings", e)
+                    }
+
+                    val pluginsFolder = PluginScanner(context).pluginsDir
+                    if (pluginsFolder.exists() && pluginsFolder.isDirectory) {
+                        Log.i(TAG, "prepareBackupFile: Backing up plugins from ${pluginsFolder.absolutePath}")
+                        addDirectoryToZip(
+                            zipOut = zipOut,
+                            rootDir = pluginsFolder,
+                            currentDir = pluginsFolder,
+                            entryPrefix = "${PluginScanner.PLUGINS_DIR}/"
+                        )
+                    } else {
+                        Log.w(TAG, "prepareBackupFile: Plugins folder does not exist or is not a directory")
+                    }
+                }
             }
         }
 
@@ -201,7 +236,11 @@ class WebDavSync(
         backupFile
     }
 
-    private suspend fun restoreFromBackupFile(backupFile: File, config: WebDavConfig) = withContext(Dispatchers.IO) {
+    private suspend fun restoreFromBackupFile(
+        backupFile: File,
+        config: WebDavConfig,
+        includePlugins: Boolean = true
+    ) = withContext(Dispatchers.IO) {
         Log.i(TAG, "restoreFromBackupFile: Starting restore from ${backupFile.absolutePath}")
 
         ZipInputStream(FileInputStream(backupFile)).use { zipIn ->
@@ -294,6 +333,20 @@ class WebDavSync(
                                 zipEntry.name.startsWith("${FileFolders.SKILLS}/")
                             ) {
                                 restoreSkillEntry(zipIn, zipEntry.name)
+                            } else if (includePlugins && zipEntry.name == "plugin_settings.json") {
+                                try {
+                                    val pluginSettingsJson = zipIn.readBytes().toString(Charsets.UTF_8)
+                                    val pluginSettings = json.decodeFromString<PluginSettingsExport>(pluginSettingsJson)
+                                    pluginRepository.importPluginSettings(pluginSettings)
+                                    Log.i(TAG, "restoreFromBackupFile: Restored plugin settings")
+                                } catch (e: Exception) {
+                                    Log.e(TAG, "restoreFromBackupFile: Failed to restore plugin settings", e)
+                                }
+                            } else if (includePlugins &&
+                                config.items.contains(WebDavConfig.BackupItem.FILES) &&
+                                zipEntry.name.startsWith("${PluginScanner.PLUGINS_DIR}/")
+                            ) {
+                                restorePluginEntry(zipIn, zipEntry.name)
                             } else {
                                 Log.i(TAG, "restoreFromBackupFile: Skipping entry ${zipEntry.name}")
                             }
@@ -336,6 +389,28 @@ class WebDavSync(
                 val relativePath = file.relativeTo(rootDir).invariantSeparatorsPath
                 addFileToZip(zipOut, file, "$entryPrefix$relativePath")
             }
+        }
+    }
+
+    private fun restorePluginEntry(zipIn: ZipInputStream, entryName: String) {
+        val relativePath = entryName.substringAfter("${PluginScanner.PLUGINS_DIR}/")
+        if (relativePath.isBlank()) {
+            Log.w(TAG, "restoreFromBackupFile: Invalid plugin entry $entryName")
+            return
+        }
+
+        val pluginsRoot = PluginScanner(context).pluginsDir.apply { mkdirs() }
+        val targetFile = File(pluginsRoot, relativePath)
+        targetFile.parentFile?.mkdirs()
+
+        try {
+            FileOutputStream(targetFile).use { outputStream ->
+                zipIn.copyTo(outputStream)
+            }
+            Log.i(TAG, "restoreFromBackupFile: Restored plugin file $entryName (${targetFile.length()} bytes)")
+        } catch (e: Exception) {
+            Log.e(TAG, "restoreFromBackupFile: Failed to restore plugin file $entryName", e)
+            throw Exception("Failed to restore plugin file $entryName: ${e.message}")
         }
     }
 
