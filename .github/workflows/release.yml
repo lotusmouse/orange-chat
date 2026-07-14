@@ -32,6 +32,11 @@ jobs:
       - name: Install pnpm
         run: npm install -g pnpm
 
+      - name: Install web-ui dependencies
+        run: |
+          cd web-ui
+          pnpm install
+
       - name: Generate Keystore
         run: |
           keytool -genkey -v \
